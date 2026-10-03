@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ghar Jagga Map</title>
+<meta name="description" content="Houses and land for sale, shutters and rooms for rent across Nepal. Browse by place on the map and see the price per anna.">
+<meta property="og:title" content="Ghar Jagga Map">
+<meta property="og:description" content="Houses and land for sale, shutters and rooms for rent across Nepal. Browse by place on the map and see the price per anna.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#B81D2C">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=Instrument+Sans:wght@400;500;600&amp;family=Noto+Sans+Devanagari:wght@500;700&amp;display=swap">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="fatal" id="fatal" role="alert" hidden></div>
+<div class="page">
+  <header class="top">
+    <div class="brand">
+      <h1 id="siteName"></h1>
+      <p id="siteTag" class="tag"></p>
+    </div>
+    <nav class="social" id="socialNav" aria-label="Social media"></nav>
+    <button class="btn primary" id="talkBtn" type="button">Talk to me</button>
+  </header>
+
+  <main class="work">
+    <section class="mapcol" aria-label="Map">
+      <div id="mainMap" class="mapbox"></div>
+      <div class="legend" id="legend" aria-hidden="true"></div>
+    </section>
+
+    <section class="listcol" aria-label="Properties">
+      <section class="places" id="placesBox" aria-labelledby="placesH" hidden>
+        <div>
+          <h2 id="placesH">Browse by place</h2>
+          <p class="hint">Tap a place to zoom the map to it. The land price is the average of the plots listed there.</p>
+        </div>
+        <div class="pgroups" id="placesList"></div>
+      </section>
+  <section class="budget" aria-labelledby="budgetH">
+    <div class="budget-head">
+      <h2 id="budgetH">What can your budget buy?</h2>
+      <p>Type how much you can spend. You will see which properties fit, explained in plain words.</p>
+    </div>
+    <form id="budgetForm" class="budget-form" novalidate>
+      <label class="field grow" for="budgetInput"><span>Your budget in rupees</span>
+        <input id="budgetInput" type="text" placeholder="50 lakh, 1.2 crore or 5000000" autocomplete="off" enterkeyhint="go">
+      </label>
+      <label class="field" for="budgetType"><span>Looking for</span>
+        <select id="budgetType"></select>
+      </label>
+      <button class="btn dark" type="submit">Show what fits</button>
+    </form>
+    <div class="quick" id="budgetQuick">
+      <span>Or tap one:</span>
+      <button class="chip" type="button" data-b="25 lakh">25 lakh</button>
+      <button class="chip" type="button" data-b="50 lakh">50 lakh</button>
+      <button class="chip" type="button" data-b="1 crore">1 crore</button>
+      <button class="chip" type="button" data-b="2 crore">2 crore</button>
+      <button class="chip" type="button" data-b="5 crore">5 crore</button>
+    </div>
+    <div id="budgetOut" class="budget-out" hidden>
+      <div id="budgetText" aria-live="polite"></div>
+      <div class="ai" id="aiBox" hidden>
+        <label class="field grow" for="aiWant"><span>What do you want it for? (optional)</span>
+          <input id="aiWant" type="text" placeholder="For example: to build a family home near a road" autocomplete="off">
+        </label>
+        <div class="row">
+          <button class="btn" id="aiBtn" type="button">Ask AI to explain</button>
+          <button class="btn small" id="aiStop" type="button" hidden>Stop</button>
+        </div>
+        <p id="aiText" class="ai-text" aria-live="polite" hidden></p>
+        <p class="hint" id="aiNote" hidden>Written by Claude AI from the listings on this page. It can make mistakes, so confirm every detail with the owner.</p>
+      </div>
+      <div class="row">
+        <button class="btn small" id="budgetClear" type="button">Clear budget</button>
+      </div>
+    </div>
+  </section>
+      <div class="filters">
+        <div class="chips" id="typeChips" role="group" aria-label="Property type"></div>
+        <label class="inline" for="districtSel"><span class="sr">District</span>
+          <select id="districtSel"></select>
+        </label>
+        <label class="inline" for="sortSel"><span class="sr">Sort</span>
+          <select id="sortSel">
+            <option value="new">Newest first</option>
+            <option value="low">Price: low to high</option>
+            <option value="high">Price: high to low</option>
+          </select>
+        </label>
+      </div>
+      <p class="count" id="countLine"></p>
+      <ul class="cards" id="cards"><li class="empty">Loading properties…</li></ul>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p id="aboutText" hidden></p>
+    <p class="hint">Open a listing to get directions on Google Maps. Prices are asking prices in Nepali rupees. 1 ropani is 16 anna, and 1 anna is 342.25 sq ft (31.8 sq m).</p>
+    <p class="hint">District boundaries: geoJSON-Nepal by Saugat Acharya (MIT).
+      <button class="linkbtn" id="loginLink" type="button">Owner sign in</button></p>
+  </footer>
+</div>
+
+<div class="ownerbar" id="ownerBar" hidden>
+  <span class="owner-title">Owner tools</span>
+  <button class="btn small" id="addBtn" type="button">+ Add property</button>
+  <button class="btn small" id="catBtn" type="button">Categories</button>
+  <button class="btn small" id="siteBtn" type="button">Site details and contacts</button>
+  <button class="btn small" id="signOutBtn" type="button">Sign out</button>
+</div>
+
+<dialog id="dlgDetail" aria-label="Property details"><div class="dlg" id="detailBody"></div></dialog>
+
+<dialog id="dlgContact" aria-labelledby="contactH">
+  <div class="dlg">
+    <div class="dlg-head">
+      <h2 id="contactH">Talk to me</h2>
+      <button class="x" type="button" data-close aria-label="Close">&times;</button>
+    </div>
+    <div id="contactBody" class="form"></div>
+  </div>
+</dialog>
+
+<dialog id="dlgEdit" aria-labelledby="editH">
+  <form class="dlg form" id="editForm" novalidate>
+    <div class="dlg-head">
+      <h2 id="editH">Add property</h2>
+      <button class="x" type="button" data-close aria-label="Close">&times;</button>
+    </div>
+
+    <fieldset class="plain">
+      <legend>What is it?</legend>
+      <div class="seg" id="f_types"></div>
+    </fieldset>
+
+    <label class="field" for="f_title"><span>Title</span>
+      <input id="f_title" type="text" maxlength="90" placeholder="For example: 4 anna plot near Ring Road">
+    </label>
+
+    <div class="grid2">
+      <div class="field"><span id="f_priceLabel">Price in rupees</span>
+        <div class="pair">
+          <input id="f_price" type="text" placeholder="45 lakh, 1.5 crore or 6500000" aria-labelledby="f_priceLabel" autocomplete="off">
+          <select id="f_pmode" aria-label="What the price is for">
+            <option value="total">total price</option>
+            <option value="unit">per anna</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><span>Size</span>
+        <div class="pair">
+          <input id="f_area" type="text" inputmode="decimal" placeholder="4" aria-label="Size amount" autocomplete="off">
+          <select id="f_unit" aria-label="Size unit">
+            <option value="aana">anna</option>
+            <option value="ropani">ropani</option>
+            <option value="bigha">bigha</option>
+            <option value="kattha">kattha</option>
+            <option value="dhur">dhur</option>
+            <option value="sqm">sq m</option>
+            <option value="sqft">sq ft</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <p class="hint" id="f_priceRead"></p>
+
+    <label class="field" for="f_place"><span>Place name</span>
+      <input id="f_place" type="text" maxlength="60" list="placeList" placeholder="For example: Sanepa" autocomplete="off">
+      <datalist id="placeList"></datalist>
+    </label>
+    <p class="hint">Write the place the same way every time (Sanepa, Bhaisepati, Kupondole) so its listings are counted together.</p>
+
+    <div class="field"><span>Where is it? Tap the map, then drag the pin to the exact spot</span>
+      <div id="miniMap" class="mapbox minimap"></div>
+    </div>
+    <div class="grid2">
+      <label class="field" for="f_coords"><span>Or paste from Google Maps</span>
+        <input id="f_coords" type="text" placeholder="27.71720, 85.32400" autocomplete="off">
+      </label>
+      <div class="field"><span>District</span>
+        <p class="readout" id="f_district">Not placed yet</p>
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn small" type="button" id="f_here">Use where I am standing now</button>
+      <span class="hint">Or in Google Maps, press and hold on the spot and paste the two numbers above.</span>
+    </div>
+
+    <label class="field" for="f_desc"><span>Details</span>
+      <textarea id="f_desc" rows="4" maxlength="1200" placeholder="Road access, facing, water, papers, number of rooms, anything a buyer asks first"></textarea>
+    </label>
+
+    <div class="field"><span>Photos (up to 10)</span>
+      <div class="photos" id="f_photoList"></div>
+      <div class="row">
+        <label class="btn small filebtn" for="f_photos">Choose photos
+          <input id="f_photos" type="file" accept="image/*" multiple>
+        </label>
+        <span class="hint" id="f_photoNote">Photos are made smaller automatically so the site stays fast.</span>
+      </div>
+    </div>
+
+    <label class="check" for="f_sold"><input id="f_sold" type="checkbox"> <span id="f_soldLabel">Already sold</span></label>
+
+    <p class="err" id="f_err" role="alert" hidden></p>
+    <div class="row end">
+      <button class="btn" type="button" data-close>Cancel</button>
+      <button class="btn primary" type="submit" id="f_save">Save and publish</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgSite" aria-labelledby="siteH">
+  <form class="dlg form" id="siteForm" novalidate>
+    <div class="dlg-head">
+      <h2 id="siteH">Site details and contacts</h2>
+      <button class="x" type="button" data-close aria-label="Close">&times;</button>
+    </div>
+    <div class="grid2">
+      <label class="field" for="s_name"><span>Site name</span><input id="s_name" type="text" maxlength="40"></label>
+      <label class="field" for="s_owner"><span>Your name</span><input id="s_owner" type="text" maxlength="40" placeholder="Shown on the contact panel"></label>
+    </div>
+    <label class="field" for="s_tag"><span>One line under the name</span><input id="s_tag" type="text" maxlength="90"></label>
+    <div class="grid2">
+      <label class="field" for="s_phone"><span>Phone number</span><input id="s_phone" type="text" inputmode="tel" maxlength="24" placeholder="+977 98XXXXXXXX"></label>
+      <label class="field" for="s_whatsapp"><span>WhatsApp number with country code</span><input id="s_whatsapp" type="text" inputmode="tel" maxlength="24" placeholder="97798XXXXXXXX"></label>
+    </div>
+    <div class="grid2">
+      <label class="field" for="s_fb"><span>Facebook page</span><input id="s_fb" type="text" maxlength="160" placeholder="Link or page name"></label>
+      <label class="field" for="s_ig"><span>Instagram</span><input id="s_ig" type="text" maxlength="160" placeholder="Link or @name"></label>
+    </div>
+    <div class="grid2">
+      <label class="field" for="s_tt"><span>TikTok</span><input id="s_tt" type="text" maxlength="160" placeholder="Link or @name"></label>
+    </div>
+    <label class="field" for="s_about"><span>About you (shown at the bottom)</span>
+      <textarea id="s_about" rows="3" maxlength="400" placeholder="A sentence or two about you and the areas you work in"></textarea>
+    </label>
+    <p class="err" id="s_err" role="alert" hidden></p>
+    <div class="row end">
+      <button class="btn" type="button" data-close>Cancel</button>
+      <button class="btn primary" type="submit" id="s_save">Save and publish</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgCats" aria-labelledby="catsH">
+  <div class="dlg form">
+    <div class="dlg-head">
+      <h2 id="catsH">Categories</h2>
+      <button class="x" type="button" data-close aria-label="Close">&times;</button>
+    </div>
+    <p class="hint">Categories are the groups visitors filter by. A category can be removed only when no listing uses it.</p>
+    <ul class="catlist" id="catList"></ul>
+    <form id="catForm" class="form" novalidate>
+      <label class="field" for="c_name"><span>New category name</span>
+        <input id="c_name" type="text" maxlength="24" placeholder="For example: Flat rent" autocomplete="off">
+      </label>
+      <fieldset class="plain">
+        <legend>Is it for sale or for rent?</legend>
+        <div class="seg">
+          <label><input type="radio" name="c_deal" id="c_deal_sale" value="sale" checked><span>For sale</span></label>
+          <label><input type="radio" name="c_deal" id="c_deal_rent" value="rent"><span>For rent, price per month</span></label>
+        </div>
+      </fieldset>
+      <p class="err" id="c_err" role="alert" hidden></p>
+      <div class="row end">
+        <button class="btn" type="button" data-close>Close</button>
+        <button class="btn primary" type="submit" id="c_save">Add and publish</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+
+<dialog id="dlgLogin" aria-labelledby="loginH">
+  <form class="dlg form" id="loginForm" novalidate>
+    <div class="dlg-head">
+      <h2 id="loginH">Owner sign in</h2>
+      <button class="x" type="button" data-close aria-label="Close">&times;</button>
+    </div>
+    <label class="field" for="l_email"><span>Email</span><input id="l_email" type="text" inputmode="email" autocomplete="username"></label>
+    <label class="field" for="l_pass"><span>Password</span><input id="l_pass" type="password" autocomplete="current-password"></label>
+    <p class="err" id="l_err" role="alert" hidden></p>
+    <div class="row end">
+      <button class="btn" type="button" data-close>Cancel</button>
+      <button class="btn primary" type="submit" id="l_save">Sign in</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/config.js"></script>
+<script src="js/geo.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
