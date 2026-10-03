@@ -15,7 +15,7 @@ if (!window.supabase || !CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) { fatal('Th
 const sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
 
 /* ---------- data ---------- */
-const DEF_SITE = { name: 'Ghar Jagga Map', tagline: 'Houses and land for sale, shutters and rooms for rent across Nepal', owner: '', phone: '', whatsapp: '', facebook: '', instagram: '', tiktok: '', about: '' };
+const DEF_SITE = { name: 'Ghar Jagga Map', tagline: 'Houses and land for sale, shutters and rooms for rent in the Kathmandu Valley', owner: '', phone: '', whatsapp: '', facebook: '', instagram: '', tiktok: '', about: '' };
 const DEF_CATS = [
   { id: 'house', label: 'House', deal: 'sale', color: 1, shape: 0 },
   { id: 'land', label: 'Land', deal: 'sale', color: 2, shape: 1 },
@@ -55,7 +55,12 @@ async function loadAll() {
 
 /* ---------- Nepal districts (to name the district a pin falls in) ---------- */
 const NEPAL = { latMin: 26.3, latMax: 30.5, lngMin: 80.0, lngMax: 88.25 };
-const NEPAL_BOUNDS = [[NEPAL.latMin, NEPAL.lngMin], [NEPAL.latMax, NEPAL.lngMax]];
+// The area the site covers. The map opens on it and cannot be zoomed out or dragged beyond it.
+// To cover more later, add MAP_AREA: [[southLat, westLng], [northLat, eastLng]] to js/config.js.
+const AREA = Array.isArray(CFG.MAP_AREA) ? CFG.MAP_AREA : [[27.55, 85.15], [27.85, 85.60]];
+const AREA_NAME = CFG.MAP_AREA_NAME || 'the Kathmandu Valley';
+const NEPAL_BOUNDS = AREA;
+const inArea = (lat, lng) => lat >= AREA[0][0] && lat <= AREA[1][0] && lng >= AREA[0][1] && lng <= AREA[1][1];
 const DISTRICTS = (window.NEPAL_GEO || []).map(g => {
   const rings = g.r.map(str => {
     const a = str.split(' ').map(Number), pts = [];
@@ -224,10 +229,14 @@ function baseLayer() {
     maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>'
   });
 }
-const map = L.map('mainMap', { minZoom: 6, maxBounds: L.latLngBounds(NEPAL_BOUNDS).pad(0.5), zoomSnap: 0.5 });
+const map = L.map('mainMap', { minZoom: 9, maxBounds: L.latLngBounds(AREA).pad(0.12), maxBoundsViscosity: 1, zoomSnap: 0.5 });
+// Lock zooming out at the level where the whole area just fits the map box.
+function lockZoom(m) { m.setMinZoom(Math.floor(m.getBoundsZoom(AREA, false) * 2) / 2); }
 map.attributionControl.setPrefix(false);
 baseLayer().addTo(map);
-map.fitBounds(NEPAL_BOUNDS);
+lockZoom(map);
+map.fitBounds(AREA);
+map.on('resize', () => lockZoom(map));
 const markLayer = L.layerGroup().addTo(map);
 let mapItems = [];
 
@@ -285,17 +294,18 @@ function kmFrom(l) {
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 const kmText = k => k == null ? '' : (k < 1 ? Math.round(k * 1000 / 10) * 10 + ' m from you' : (k < 10 ? Math.round(k * 10) / 10 : Math.round(k)) + ' km from you');
-function locate(then) {
-  if (!navigator.geolocation) { toast('This device cannot share its location.'); return; }
-  toast('Finding where you are…');
+function locate(then, quiet) {
+  if (!navigator.geolocation) { if (!quiet) toast('This device cannot share its location.'); return; }
+  if (!quiet) toast('Finding where you are…');
   navigator.geolocation.getCurrentPosition(p => {
     me = { lat: p.coords.latitude, lng: p.coords.longitude };
     if (!meMark) meMark = L.marker([me.lat, me.lng], { icon: L.divIcon({ className: 'me-wrap', html: '<span class="me-dot"></span>', iconSize: [0, 0] }), interactive: false, keyboard: false, zIndexOffset: 2000 }).addTo(map);
     else meMark.setLatLng([me.lat, me.lng]);
     if (then) then();
-    else { map.setView([me.lat, me.lng], Math.max(map.getZoom(), 15)); toast('The blue dot is where you are.'); }
+    else if (inArea(me.lat, me.lng)) { map.setView([me.lat, me.lng], Math.max(map.getZoom(), 15)); toast('The blue dot is where you are.'); }
+    else toast('You are outside ' + AREA_NAME + ', so the map stays here. Distances are still shown.');
     renderList();
-  }, () => toast('Could not get your location. Allow location for this site in your browser settings.'), { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+  }, () => { if (!quiet) toast('Could not get your location. Allow location for this site in your browser settings.'); }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
 }
 const LocateCtl = L.Control.extend({
   options: { position: 'topright' },
@@ -802,7 +812,7 @@ $('#siteBtn').addEventListener('click', openSite);
 let draft = null, mini = null, miniMark = null;
 function ensureMini() {
   if (mini) return;
-  mini = L.map('miniMap', { minZoom: 6, maxBounds: L.latLngBounds(NEPAL_BOUNDS).pad(0.5) });
+  mini = L.map('miniMap', { minZoom: 9, maxBounds: L.latLngBounds(AREA).pad(0.12), maxBoundsViscosity: 1 });
   mini.attributionControl.setPrefix(false);
   baseLayer().addTo(mini);
   mini.on('click', e => setDraftSpot(e.latlng.lat, e.latlng.lng, false, false));
@@ -816,8 +826,8 @@ function setMiniMark(lat, lng) {
 }
 function setDraftSpot(lat, lng, fromInput, move) {
   const err = $('#f_err');
-  if (!inNepalBox(lat, lng)) {
-    err.textContent = 'That spot is outside Nepal. Check the numbers: latitude first (about 26 to 30), then longitude (about 80 to 88).';
+  if (!inArea(lat, lng)) {
+    err.textContent = 'That spot is outside ' + AREA_NAME + ', the area this site covers. Check the numbers: latitude first, then longitude.';
     err.hidden = false;
     return;
   }
@@ -894,8 +904,9 @@ function openEdit(id) {
   }
   setTimeout(() => {
     mini.invalidateSize();
+    lockZoom(mini);
     if (draft.lat != null && draft.lng != null) { mini.setView([draft.lat, draft.lng], 17); setMiniMark(draft.lat, draft.lng); }
-    else { const c = map.getCenter(); if (map.getZoom() >= 11) mini.setView(c, map.getZoom()); else mini.fitBounds(NEPAL_BOUNDS); }
+    else { const c = map.getCenter(); if (map.getZoom() >= 13) mini.setView(c, map.getZoom()); else mini.fitBounds(AREA); }
   }, 60);
   dlgEdit.scrollTop = 0;
 }
@@ -1081,6 +1092,8 @@ renderHeader(); renderLegend();
   const m = /^#p-([\w-]+)$/.exec(location.hash || '');
   if (m && byId(m[1])) { const l = byId(m[1]); map.setView([l.lat, l.lng], 16); openDetail(m[1]); }
   checkOwner();
+  // GPS when the map opens: show the blue dot, keep the whole area in view.
+  locate(() => {}, true);
   fetch('/api/explain').then(r => r.ok ? r.json() : null).then(j => { aiOn = !!(j && j.enabled); if (aiOn && budget) $('#aiBox').hidden = false; }).catch(() => {});
 })();
 })();
