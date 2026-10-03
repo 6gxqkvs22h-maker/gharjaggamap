@@ -248,28 +248,67 @@ function fitPoints(pts) {
   if (pts.length === 1) { map.setView([pts[0].lat, pts[0].lng], Math.max(map.getZoom(), 16)); return; }
   map.fitBounds(L.latLngBounds(pts.map(p => [p.lat, p.lng])), { padding: [60, 60], maxZoom: 17 });
 }
-// Far out the map shows one bubble per district, closer in one per place, and close up every pin.
+// Every property gets its own pin. Pins that would sit on top of each other at the
+// current zoom are shown as one numbered bubble; tapping it zooms in until they separate.
 function drawMap() {
   markLayer.clearLayers();
   const z = map.getZoom();
-  if (z >= 13.5) { mapItems.forEach(addPin); return; }
-  const groups = new Map();
+  const clusters = [];
   mapItems.forEach(l => {
-    if (l.status === 'sold') return;
-    const k = z < 10 ? 'd|' + (l.district || 'Other') : 'p|' + placeKey(l);
-    if (!groups.has(k)) groups.set(k, { name: z < 10 ? (l.district || 'Other') : placeName(l), items: [] });
-    groups.get(k).items.push(l);
+    const p = map.project([l.lat, l.lng], z);
+    const c = z >= 18 ? null : clusters.find(k => Math.abs(k.x - p.x) < 34 && Math.abs(k.y - p.y) < 34);
+    if (c) { c.items.push(l); const n = c.items.length; c.x += (p.x - c.x) / n; c.y += (p.y - c.y) / n; }
+    else clusters.push({ x: p.x, y: p.y, items: [l] });
   });
-  groups.forEach(g => {
-    if (g.items.length === 1) { addPin(g.items[0]); return; }
-    const lat = g.items.reduce((s, l) => s + l.lat, 0) / g.items.length, lng = g.items.reduce((s, l) => s + l.lng, 0) / g.items.length;
-    const label = g.name + ': ' + g.items.length + ' available. Zoom in.';
-    L.marker([lat, lng], { icon: L.divIcon({ className: 'pbub-wrap', html: '<span class="pbub"><b>' + g.items.length + '</b>' + esc(g.name) + '</span>', iconSize: [0, 0] }), title: label, alt: label, zIndexOffset: 500 })
-      .on('click', () => { const b = L.latLngBounds(g.items.map(l => [l.lat, l.lng])); if (z < 10) map.fitBounds(b.pad(0.3), { maxZoom: 13 }); else fitPoints(g.items); })
-      .addTo(markLayer);
+  clusters.forEach(c => {
+    if (c.items.length === 1) { addPin(c.items[0]); return; }
+    const samePlace = c.items.every(l => placeKey(l) === placeKey(c.items[0]));
+    const sameDist = c.items.every(l => l.district === c.items[0].district);
+    const name = samePlace ? placeName(c.items[0]) : sameDist ? (c.items[0].district || '') : '';
+    const label = (name ? name + ': ' : '') + c.items.length + ' properties here. Tap to zoom in.';
+    L.marker(map.unproject([c.x, c.y], z), { icon: L.divIcon({ className: 'pbub-wrap', html: '<span class="pbub"><b>' + c.items.length + '</b>' + esc(name || 'properties') + '</span>', iconSize: [0, 0] }), title: label, alt: label, zIndexOffset: 500 })
+      .on('click', () => {
+        const b = L.latLngBounds(c.items.map(l => [l.lat, l.lng]));
+        if (b.getNorthEast().equals(b.getSouthWest())) map.setView(b.getCenter(), 18);
+        else map.fitBounds(b, { padding: [70, 70], maxZoom: 18 });
+      }).addTo(markLayer);
   });
 }
 map.on('zoomend', drawMap);
+
+/* ---------- GPS: where the visitor is ---------- */
+let me = null, meMark = null;
+function kmFrom(l) {
+  if (!me) return null;
+  const R = 6371, d2r = Math.PI / 180, dLat = (l.lat - me.lat) * d2r, dLng = (l.lng - me.lng) * d2r;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(me.lat * d2r) * Math.cos(l.lat * d2r) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+const kmText = k => k == null ? '' : (k < 1 ? Math.round(k * 1000 / 10) * 10 + ' m from you' : (k < 10 ? Math.round(k * 10) / 10 : Math.round(k)) + ' km from you');
+function locate(then) {
+  if (!navigator.geolocation) { toast('This device cannot share its location.'); return; }
+  toast('Finding where you are…');
+  navigator.geolocation.getCurrentPosition(p => {
+    me = { lat: p.coords.latitude, lng: p.coords.longitude };
+    if (!meMark) meMark = L.marker([me.lat, me.lng], { icon: L.divIcon({ className: 'me-wrap', html: '<span class="me-dot"></span>', iconSize: [0, 0] }), interactive: false, keyboard: false, zIndexOffset: 2000 }).addTo(map);
+    else meMark.setLatLng([me.lat, me.lng]);
+    if (then) then();
+    else { map.setView([me.lat, me.lng], Math.max(map.getZoom(), 15)); toast('The blue dot is where you are.'); }
+    renderList();
+  }, () => toast('Could not get your location. Allow location for this site in your browser settings.'), { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+}
+const LocateCtl = L.Control.extend({
+  options: { position: 'topright' },
+  onAdd: function () {
+    const b = L.DomUtil.create('button', 'locate-btn');
+    b.type = 'button';
+    b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>My location';
+    L.DomEvent.disableClickPropagation(b);
+    L.DomEvent.on(b, 'click', () => locate());
+    return b;
+  }
+});
+map.addControl(new LocateCtl());
 
 /* ---------- header, legend, footer ---------- */
 function renderHeader() {
@@ -332,6 +371,7 @@ function renderList() {
   let arr = all.filter(matches);
   if (filter.sort === 'low') arr = arr.slice().sort((a, b) => (a.price || Infinity) - (b.price || Infinity));
   else if (filter.sort === 'high') arr = arr.slice().sort((a, b) => (b.price || 0) - (a.price || 0));
+  else if (filter.sort === 'near' && me) arr = arr.slice().sort((a, b) => kmFrom(a) - kmFrom(b));
 
   const bits = [];
   const pl = filter.place ? all.find(l => placeKey(l) === filter.place) : null;
@@ -342,13 +382,13 @@ function renderList() {
 
   const ul = $('#cards');
   if (!arr.length) {
-    ul.innerHTML = '<li class="empty"><span>' + (all.length ? 'Nothing matches these filters yet.' : 'No properties are listed yet.' + (owner ? ' Use “Add property” below to add the first one.' : ' Check back soon.')) + '</span>' +
+    ul.innerHTML = '<li class="empty"><span>' + (all.length ? 'Nothing matches these filters yet.' : 'No properties are listed yet, so the map has no pins.' + (owner ? ' Press “+ Add property” in the bar at the bottom to add the first one. Its pin appears on the map as soon as you save.' : ' The owner adds them after pressing “Owner sign in” at the top.')) + '</span>' +
       (all.length ? '<button class="btn small" type="button" data-clear>Show all properties</button>' : '') + '</li>';
   } else {
     ul.innerHTML = arr.map(l => {
       const ph = (l.photos || []).find(okUrl);
       const c = catOf(l.type);
-      const meta = [areaText(l), [l.place, l.district].filter(Boolean).join(', ')].filter(Boolean).join(' · ');
+      const meta = [areaText(l), [l.place, l.district].filter(Boolean).join(', '), kmText(kmFrom(l))].filter(Boolean).join(' · ');
       return '<li class="card' + (l.id === selectedId ? ' sel' : '') + '" data-id="' + esc(l.id) + '">' +
         '<button class="card-main" type="button" data-open>' +
         '<span class="thumb" style="--c:' + cvar(c) + '">' + (ph ? '<img src="' + esc(ph) + '" alt="" loading="lazy">' : catIcon(c)) + '</span>' +
@@ -413,7 +453,10 @@ $('#districtSel').addEventListener('change', e => {
   rerun();
   if (filter.district) fitPoints(state.listings.filter(l => l.district === filter.district)); else map.fitBounds(NEPAL_BOUNDS);
 });
-$('#sortSel').addEventListener('change', e => { filter.sort = e.target.value; renderList(); });
+$('#sortSel').addEventListener('change', e => {
+  filter.sort = e.target.value;
+  if (filter.sort === 'near' && !me) locate(() => {}); else renderList();
+});
 $('#cards').addEventListener('click', e => {
   if (e.target.closest('[data-clear]')) { filter.type = 'all'; filter.district = ''; filter.place = ''; clearBudget(); map.fitBounds(NEPAL_BOUNDS); return; }
   const li = e.target.closest('.card'); if (!li) return;
@@ -572,6 +615,7 @@ function openDetail(id) {
   if (rateText(l)) facts.push(['Price per ' + rateOf(l).label, rateText(l)]);
   if (l.place) facts.push(['Place', l.place]);
   if (l.district) facts.push(['District', l.district + (D ? ', ' + D.prov + ' Province' : '')]);
+  if (me) facts.push(['Distance', kmText(kmFrom(l))]);
   facts.push(['Status', l.status === 'sold' ? soldWord(l) : 'Available']);
   let h = '<div class="dlg-head"><div><div class="card-top">' + badges(l) + '</div><h2>' + esc(l.title) + '</h2></div>' +
     '<button class="x" type="button" data-close aria-label="Close">&times;</button></div>';
@@ -582,7 +626,7 @@ function openDetail(id) {
   h += '<dl class="facts">' + facts.map(f => '<div><dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1]) + '</dd></div>').join('') + '</dl>';
   if (l.desc) h += '<p class="desc">' + esc(l.desc) + '</p>';
   h += '<div class="row"><button class="btn primary" type="button" data-talk>Talk to me about this</button>' +
-    '<a class="btn" href="https://www.google.com/maps?q=' + (+l.lat).toFixed(6) + ',' + (+l.lng).toFixed(6) + '" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>' +
+    '<a class="btn" href="https://www.google.com/maps/dir/?api=1&amp;destination=' + (+l.lat).toFixed(6) + ',' + (+l.lng).toFixed(6) + '" target="_blank" rel="noopener noreferrer">Get directions</a>' +
     '<button class="btn" type="button" data-showmap>Show on this map</button>' +
     '<button class="btn" type="button" data-share>Copy link</button></div>';
   if (owner) h += '<div class="row owner-row"><button class="btn small" type="button" data-edit>Edit</button>' +
@@ -717,6 +761,7 @@ function setOwner(on) {
   owner = !!on;
   $('#ownerBar').hidden = !owner;
   $('#loginLink').hidden = owner;
+  $('#loginBtn').hidden = owner;
   document.body.classList.toggle('has-owner', owner);
   renderList();
 }
@@ -730,7 +775,9 @@ async function checkOwner() {
     return r.data === true ? 'owner' : 'not_owner';
   } catch (e) { setOwner(false); return 'error'; }
 }
-$('#loginLink').addEventListener('click', () => { $('#l_err').hidden = true; $('#l_pass').value = ''; dlgLogin.showModal(); });
+const openLogin = () => { $('#l_err').hidden = true; $('#l_pass').value = ''; dlgLogin.showModal(); };
+$('#loginLink').addEventListener('click', openLogin);
+$('#loginBtn').addEventListener('click', openLogin);
 $('#loginForm').addEventListener('submit', async e => {
   e.preventDefault();
   const err = $('#l_err'), email = $('#l_email').value.trim(), pass = $('#l_pass').value;
@@ -743,7 +790,7 @@ $('#loginForm').addEventListener('submit', async e => {
     if (r.error) return bad(/invalid/i.test(r.error.message || '') ? 'The email or password is not right.' : 'Could not sign in. Check your connection and try again.');
     const who = await checkOwner();
     if (who === 'owner') { dlgLogin.close(); toast('Signed in. Owner tools are at the bottom.'); }
-    else { await sb.auth.signOut(); bad(who === 'not_owner' ? 'This account is not set as the site owner yet. Do the “make yourself the owner” step in SETUP.md.' : 'Signed in, but the owner check failed. Run the database setup file first.'); }
+    else { await sb.auth.signOut(); bad(who === 'not_owner' ? 'This account is not set as the site owner yet. Run setup-all.sql in Supabase, then sign in again.' : 'Signed in, but the owner check failed. Run setup-all.sql in Supabase first.'); }
   } catch (e2) { bad('Could not sign in. Check your connection and try again.'); }
   finally { setBusy(false); }
 });
@@ -1025,7 +1072,7 @@ renderHeader(); renderLegend();
   try { await loadAll(); }
   catch (e) {
     console.error(e);
-    $('#cards').innerHTML = '<li class="empty">The listings could not be loaded. If this is a new site, run the database setup file first. Otherwise check your connection and reload.</li>';
+    $('#cards').innerHTML = '<li class="empty">The listings could not be loaded. If this is a new site, the database is not set up yet: run setup-all.sql in Supabase (SQL Editor), then reload. Otherwise check your connection and reload.</li>';
     renderHeader(); renderLegend();
     checkOwner();
     return;
