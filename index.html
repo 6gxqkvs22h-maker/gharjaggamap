@@ -11,7 +11,8 @@
 <meta property="og:locale" content="en_US">
 <meta name="twitter:card" content="summary">
 <meta property="og:type" content="website">
-<meta name="theme-color" content="#B81D2C">
+<meta name="theme-color" content="#080D0B">
+<meta name="color-scheme" content="dark">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=Instrument+Sans:wght@400;500;600&amp;family=Noto+Sans+Devanagari:wght@500;700&amp;display=swap">
@@ -21,70 +22,45 @@
 <body>
 <div class="fatal" id="fatal" role="alert" hidden></div>
 <div class="page">
-  <header class="top">
-    <div class="brand">
-      <h1 id="siteName"></h1>
-      <p id="siteTag" class="tag"></p>
-    </div>
-    <nav class="social" id="socialNav" aria-label="Social media"></nav>
-    <button class="btn" id="loginBtn" type="button">Owner sign in</button>
-    <button class="btn primary" id="talkBtn" type="button">Contact</button>
+  <header class="bar">
+    <button class="iconbtn" id="menuBtn" type="button" aria-label="Menu" aria-haspopup="dialog">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5h16M4 12h16M4 17.5h16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+    </button>
+    <h1 id="siteName"></h1>
+    <button class="btn small wideonly" id="barContact" type="button">Contact</button>
+    <button class="btn small pill" id="helpBtn" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M10 8v8l6.5-4z" fill="var(--bg)"/></svg>How to use
+    </button>
   </header>
 
   <main class="work">
     <section class="mapcol" aria-label="Map">
       <div id="mainMap" class="mapbox"></div>
-      <div class="legend" id="legend" aria-hidden="true"></div>
     </section>
 
     <section class="listcol" aria-label="Properties">
-      <section class="places" id="placesBox" aria-labelledby="placesH" hidden>
-        <div>
-          <h2 id="placesH">Browse by place</h2>
-          <p class="hint">Tap a place to zoom the map to it. The land price is the average of the plots listed there.</p>
+      <section class="feat" aria-labelledby="featH">
+        <div class="grab" aria-hidden="true"></div>
+        <div class="sec-head">
+          <h2 id="featH">Featured</h2>
+          <button class="golink" id="viewAll" type="button">View all</button>
         </div>
-        <div class="pgroups" id="placesList"></div>
+        <div class="chips hscroll" id="topChips" role="group" aria-label="Property type"></div>
+        <div class="fwrap">
+          <div class="fcar" id="fcar"></div>
+          <button class="fnav prev" id="fprev" type="button" aria-label="Previous property" hidden>&lsaquo;</button>
+          <button class="fnav next" id="fnext" type="button" aria-label="Next property" hidden>&rsaquo;</button>
+        </div>
+        <div class="dots" id="fdots" aria-hidden="true"></div>
       </section>
-  <section class="budget" aria-labelledby="budgetH">
-    <div class="budget-head">
-      <h2 id="budgetH">What can your budget buy?</h2>
-      <p>Type how much you can spend. You will see which properties fit, explained in plain words.</p>
-    </div>
-    <form id="budgetForm" class="budget-form" novalidate>
-      <label class="field grow" for="budgetInput"><span>Your budget (Rs.)</span>
-        <input id="budgetInput" type="text" placeholder="50 lakh, 1.2 crore or 5000000" autocomplete="off" enterkeyhint="go">
-      </label>
-      <label class="field" for="budgetType"><span>Looking for</span>
-        <select id="budgetType"></select>
-      </label>
-      <button class="btn dark" type="submit">Show what fits</button>
-    </form>
-    <div class="quick" id="budgetQuick">
-      <span>Or tap one:</span>
-      <button class="chip" type="button" data-b="25 lakh">25 lakh</button>
-      <button class="chip" type="button" data-b="50 lakh">50 lakh</button>
-      <button class="chip" type="button" data-b="1 crore">1 crore</button>
-      <button class="chip" type="button" data-b="2 crore">2 crore</button>
-      <button class="chip" type="button" data-b="5 crore">5 crore</button>
-    </div>
-    <div id="budgetOut" class="budget-out" hidden>
-      <div id="budgetText" aria-live="polite"></div>
-      <div class="ai" id="aiBox" hidden>
-        <label class="field grow" for="aiWant"><span>Purpose (optional)</span>
-          <input id="aiWant" type="text" placeholder="For example: to build a family home near a road" autocomplete="off">
-        </label>
-        <div class="row">
-          <button class="btn" id="aiBtn" type="button">Ask AI to explain</button>
-          <button class="btn small" id="aiStop" type="button" hidden>Stop</button>
-        </div>
-        <p id="aiText" class="ai-text" aria-live="polite" hidden></p>
-        <p class="hint" id="aiNote" hidden>Written by Claude AI from the listings on this page. It can make mistakes, so confirm every detail with the owner.</p>
-      </div>
-      <div class="row">
-        <button class="btn small" id="budgetClear" type="button">Clear budget</button>
-      </div>
-    </div>
-  </section>
+
+      <section class="near" id="nearBox" aria-labelledby="nearH" hidden>
+        <div class="sec-head"><h2 id="nearH">Nearby highlights</h2></div>
+        <div class="nrow hscroll" id="nrow"></div>
+      </section>
+
+      <section class="allbox" aria-labelledby="allH">
+        <div class="sec-head"><h2 id="allH">All properties</h2></div>
       <div class="filters">
         <div class="chips" id="dealChips" role="group" aria-label="Sale or rent"></div>
         <div class="chips" id="typeChips" role="group" aria-label="Property type"></div>
@@ -100,6 +76,7 @@
               <option value="near">Nearest to me</option>
             </select>
           </label>
+          <button class="btn small" id="savedBtn" type="button" aria-pressed="false">Saved</button>
           <button class="btn small" id="moreBtn" type="button" aria-expanded="false" aria-controls="moreBox">More filters</button>
         </div>
         <div class="more" id="moreBox" hidden>
@@ -154,6 +131,55 @@
       </div>
       <p class="count" id="countLine"></p>
       <ul class="cards" id="cards"><li class="empty">Loading properties…</li></ul>
+      </section>
+
+      <section class="places" id="placesBox" aria-labelledby="placesH" hidden>
+        <div>
+          <h2 id="placesH">Browse by place</h2>
+          <p class="hint">Tap a place to zoom the map to it. The land price is the average of the plots listed there.</p>
+        </div>
+        <div class="pgroups" id="placesList"></div>
+      </section>
+  <section class="budget" aria-labelledby="budgetH">
+    <div class="budget-head">
+      <h2 id="budgetH">What can your budget buy?</h2>
+      <p>Type how much you can spend. You will see which properties fit, explained in plain words.</p>
+    </div>
+    <form id="budgetForm" class="budget-form" novalidate>
+      <label class="field grow" for="budgetInput"><span>Your budget (Rs.)</span>
+        <input id="budgetInput" type="text" placeholder="50 lakh, 1.2 crore or 5000000" autocomplete="off" enterkeyhint="go">
+      </label>
+      <label class="field" for="budgetType"><span>Looking for</span>
+        <select id="budgetType"></select>
+      </label>
+      <button class="btn dark" type="submit">Show what fits</button>
+    </form>
+    <div class="quick" id="budgetQuick">
+      <span>Or tap one:</span>
+      <button class="chip" type="button" data-b="25 lakh">25 lakh</button>
+      <button class="chip" type="button" data-b="50 lakh">50 lakh</button>
+      <button class="chip" type="button" data-b="1 crore">1 crore</button>
+      <button class="chip" type="button" data-b="2 crore">2 crore</button>
+      <button class="chip" type="button" data-b="5 crore">5 crore</button>
+    </div>
+    <div id="budgetOut" class="budget-out" hidden>
+      <div id="budgetText" aria-live="polite"></div>
+      <div class="ai" id="aiBox" hidden>
+        <label class="field grow" for="aiWant"><span>Purpose (optional)</span>
+          <input id="aiWant" type="text" placeholder="For example: to build a family home near a road" autocomplete="off">
+        </label>
+        <div class="row">
+          <button class="btn" id="aiBtn" type="button">Ask AI to explain</button>
+          <button class="btn small" id="aiStop" type="button" hidden>Stop</button>
+        </div>
+        <p id="aiText" class="ai-text" aria-live="polite" hidden></p>
+        <p class="hint" id="aiNote" hidden>Written by Claude AI from the listings on this page. It can make mistakes, so confirm every detail with the owner.</p>
+      </div>
+      <div class="row">
+        <button class="btn small" id="budgetClear" type="button">Clear budget</button>
+      </div>
+    </div>
+  </section>
     </section>
   </main>
 
@@ -173,6 +199,43 @@
   <button class="btn small" id="signOutBtn" type="button">Sign out</button>
   <p class="dbnote" id="dbNote" role="alert" hidden>The database needs its update before new listings can be saved. In Supabase open SQL Editor and run database-update.sql.</p>
 </div>
+
+<dialog id="dlgMenu" aria-labelledby="menuH">
+  <div class="dlg">
+    <div class="dlg-head">
+      <div><h2 id="menuH">Ghar Jagga Map</h2></div>
+      <button class="x" type="button" data-close aria-label="Close">&times;</button>
+    </div>
+    <p id="siteTag" class="tag"></p>
+    <nav class="menu" aria-label="Menu">
+      <button class="btn primary" id="talkBtn" type="button">Contact</button>
+      <button class="btn" type="button" data-go="saved">Saved properties<b id="menuSaved"></b></button>
+      <button class="btn" type="button" data-go="allH">All properties</button>
+      <button class="btn" type="button" data-go="placesH">Browse by place</button>
+      <button class="btn" type="button" data-go="budgetH">What can your budget buy?</button>
+      <button class="btn" type="button" data-go="help">How to use</button>
+    </nav>
+    <nav class="social" id="socialNav" aria-label="Social media"></nav>
+    <button class="btn" id="loginBtn" type="button">Owner sign in</button>
+  </div>
+</dialog>
+
+<dialog id="dlgHelp" aria-labelledby="helpH">
+  <div class="dlg">
+    <div class="dlg-head">
+      <h2 id="helpH">How to use</h2>
+      <button class="x" type="button" data-close aria-label="Close">&times;</button>
+    </div>
+    <a class="btn primary" id="helpVideo" target="_blank" rel="noopener noreferrer" hidden>Watch the video</a>
+    <ul class="help">
+      <li><strong>Open a property.</strong> Tap a pin on the map, or a photo below it.</li>
+      <li><strong>See one kind.</strong> Tap Land, House, Flat, Room, Business or Shutter. “View all” has more filters: sale or rent, place, price, size, bedrooms and road width.</li>
+      <li><strong>Save it.</strong> Tap the heart. Saved properties stay on this phone, under Saved.</li>
+      <li><strong>Ask about it.</strong> Press Contact to call or send a message.</li>
+      <li><strong>Go there.</strong> “Get directions” opens Google Maps at the exact spot.</li>
+    </ul>
+  </div>
+</dialog>
 
 <dialog id="dlgDetail" aria-label="Property details"><div class="dlg" id="detailBody"></div></dialog>
 
@@ -296,6 +359,8 @@
       <label class="field" for="f_status"><span>Status</span>
         <select id="f_status"></select>
       </label>
+
+      <label class="check" for="f_featured"><input id="f_featured" type="checkbox"> <span>Show in the Featured carousel on the home page</span></label>
     </div>
 
     <p class="err" id="f_err" role="alert" hidden></p>
@@ -328,6 +393,9 @@
     <div class="grid2">
       <label class="field" for="s_tt"><span>TikTok</span><input id="s_tt" type="text" maxlength="160" placeholder="Link or @name"></label>
     </div>
+    <label class="field" for="s_howto"><span>“How to use” video link (optional)</span>
+      <input id="s_howto" type="text" inputmode="url" maxlength="500" placeholder="Paste a Facebook, Instagram, TikTok or YouTube link" autocomplete="off" autocapitalize="off" spellcheck="false">
+    </label>
     <label class="field" for="s_about"><span>About you</span>
       <textarea id="s_about" rows="3" maxlength="400" placeholder="A sentence or two about you and the areas you work in"></textarea>
     </label>

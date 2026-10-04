@@ -81,6 +81,9 @@ alter table public.listings
   add column if not exists built_year smallint,
   add column if not exists details jsonb not null default '{}'::jsonb;  -- smaller facts: kitta number, landmark, which floor, kitchen ...
 
+-- Update 3: the owner picks which listings appear in the Featured carousel on the home page.
+alter table public.listings add column if not exists featured boolean not null default false;
+
 -- Old listings took sale / rent from their category. Copy that onto each listing once.
 update public.listings l set deal_type = c.deal
   from public.categories c

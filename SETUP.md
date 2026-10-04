@@ -86,6 +86,13 @@ This part has NOT been tested against Google's live service.
   the cross removes one. They are shrunk before upload.
 - **Video:** paste the link of your Facebook, Instagram or TikTok post into **Social media post / video link**.
   Visitors get a **View video / post** button that opens your post. The video itself stays on the social site.
+- **Home page:** a dark map with a pin for every property, then category buttons, a **Featured** carousel and a
+  **Nearby** row. Switch **Featured** on for a listing in Manage listings (or tick it in the form) to put it in the
+  carousel. Until you pick some, the newest listings are shown there under "Latest".
+- **Hearts:** visitors tap the heart to save a property. It is kept on their own phone; no account is needed.
+- **How to use:** the button at the top opens a short guide. Paste a video link in **Site settings** and the guide
+  gets a "Watch the video" button.
+- **Map style:** the map uses MapTiler's dark street map. To use another, add `MAP_STYLE: 'streets-v2'` to `js/config.js`.
 - **Manage listings:** every listing with View, Edit, Delete and its status. **Sold**, **Rented** and **Unavailable**
   keep the listing; Unavailable hides it from visitors. **Delete** removes it and its photos for good.
 - **Places:** write the place name the same way every time (Sanepa, Bhaisepati) so they are counted together.
