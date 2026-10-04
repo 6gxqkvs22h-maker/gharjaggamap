@@ -180,6 +180,47 @@ insert into public.categories (id, label, deal, color, shape, no_rate, sort, for
 select 'flat', 'Flat', 'rent', 6, 6, true, 6, 'flat'
 where not exists (select 1 from public.categories where form = 'flat');
 
+-- 4b. Update 4: customers who press "I am interested" after signing in with Google ------------
+-- A customer can add and see only their own row. Only the owner sees everyone's. Nothing here is public.
+
+create table if not exists public.interests (
+  id uuid primary key default gen_random_uuid(),
+  listing_id uuid references public.listings (id) on delete set null,
+  listing_title text not null default '' check (char_length(listing_title) <= 120),
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  email text not null default '' check (char_length(email) <= 200),
+  name text not null default '' check (char_length(name) <= 120),
+  phone text not null default '' check (char_length(phone) <= 30),
+  message text not null default '' check (char_length(message) <= 600),
+  created_at timestamptz not null default now()
+);
+create unique index if not exists interests_once_idx on public.interests (user_id, listing_id);
+create index if not exists interests_created_idx on public.interests (created_at desc);
+
+alter table public.interests enable row level security;
+
+drop policy if exists "interests read own or owner" on public.interests;
+create policy "interests read own or owner" on public.interests
+  for select to authenticated using (user_id = auth.uid() or public.is_admin());
+
+drop policy if exists "interests add own" on public.interests;
+create policy "interests add own" on public.interests
+  for insert to authenticated
+  with check (user_id = auth.uid() and listing_id is not null and email = coalesce(auth.jwt() ->> 'email', ''));
+
+drop policy if exists "interests change own" on public.interests;
+create policy "interests change own" on public.interests
+  for update to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid() and email = coalesce(auth.jwt() ->> 'email', ''));
+
+drop policy if exists "interests remove own or owner" on public.interests;
+create policy "interests remove own or owner" on public.interests
+  for delete to authenticated using (user_id = auth.uid() or public.is_admin());
+
+revoke all on public.interests from anon;
+grant select, insert, update, delete on public.interests to authenticated;
+
 -- 5. Photo storage --------------------------------------------------------
 
 insert into storage.buckets (id, name, public) values ('photos', 'photos', true)

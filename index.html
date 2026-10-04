@@ -173,7 +173,7 @@
           <button class="btn small" id="aiStop" type="button" hidden>Stop</button>
         </div>
         <p id="aiText" class="ai-text" aria-live="polite" hidden></p>
-        <p class="hint" id="aiNote" hidden>Written by Claude AI from the listings on this page. It can make mistakes, so confirm every detail with the owner.</p>
+        <p class="hint" id="aiNote" hidden>Written by AI from the listings on this page. It can make mistakes, so confirm every detail with the owner.</p>
       </div>
       <div class="row">
         <button class="btn small" id="budgetClear" type="button">Clear budget</button>
@@ -196,7 +196,7 @@
   <button class="btn small" id="manageBtn" type="button">Manage listings</button>
   <button class="btn small" id="catBtn" type="button">Categories</button>
   <button class="btn small" id="siteBtn" type="button">Site settings</button>
-  <button class="btn small" id="signOutBtn" type="button">Sign out</button>
+  <button class="btn small" id="leadsBtn" type="button">Interested</button>
   <p class="dbnote" id="dbNote" role="alert" hidden>The database needs its update before new listings can be saved. In Supabase open SQL Editor and run database-update.sql.</p>
 </div>
 
@@ -213,10 +213,16 @@
       <button class="btn" type="button" data-go="allH">All properties</button>
       <button class="btn" type="button" data-go="placesH">Browse by place</button>
       <button class="btn" type="button" data-go="budgetH">What can your budget buy?</button>
+      <button class="btn" type="button" data-go="chat">Ask about properties</button>
       <button class="btn" type="button" data-go="help">How to use</button>
     </nav>
     <nav class="social" id="socialNav" aria-label="Social media"></nav>
-    <button class="btn" id="loginBtn" type="button">Owner sign in</button>
+    <div class="acct">
+      <p class="hint" id="acctText" hidden></p>
+      <button class="btn" id="googleBtn" type="button" hidden>Continue with Google</button>
+      <button class="btn" id="signOutBtn" type="button" hidden>Sign out</button>
+      <button class="btn" id="loginBtn" type="button">Owner sign in</button>
+    </div>
   </div>
 </dialog>
 
@@ -234,6 +240,61 @@
       <li><strong>Ask about it.</strong> Press Contact to call or send a message.</li>
       <li><strong>Go there.</strong> “Get directions” opens Google Maps at the exact spot.</li>
     </ul>
+  </div>
+</dialog>
+
+<dialog id="dlgChat" aria-labelledby="chatH">
+  <div class="dlg chat">
+    <div class="dlg-head">
+      <h2 id="chatH">Ask about properties</h2>
+      <button class="x" type="button" data-close aria-label="Close">&times;</button>
+    </div>
+    <div class="chatlog" id="chatLog" aria-live="polite"></div>
+    <form class="chatform" id="chatForm" novalidate>
+      <label class="sr" for="chatIn">Your question</label>
+      <input id="chatIn" type="text" maxlength="300" placeholder="Land under 1 crore in Sanepa" autocomplete="off" enterkeyhint="send">
+      <button class="btn primary" type="submit" id="chatSend">Send</button>
+    </form>
+  </div>
+</dialog>
+
+<dialog id="dlgInterest" aria-labelledby="intH">
+  <form class="dlg form" id="intForm" novalidate>
+    <div class="dlg-head">
+      <h2 id="intH">I am interested</h2>
+      <button class="x" type="button" data-close aria-label="Close">&times;</button>
+    </div>
+    <div class="about-box" id="intAbout"></div>
+    <div class="form" id="intOut">
+      <p>Continue with Google so the owner knows who to reply to. Your name and email are sent to the owner only. They are not shown on the site.</p>
+      <button class="btn primary" type="button" id="intGoogle">Continue with Google</button>
+    </div>
+    <div class="form" id="intIn" hidden>
+      <p class="hint" id="intWho"></p>
+      <label class="field" for="i_phone"><span>Your phone number (optional)</span>
+        <input id="i_phone" type="text" inputmode="tel" maxlength="24" autocomplete="tel" placeholder="98XXXXXXXX">
+      </label>
+      <label class="field" for="i_msg"><span>Message (optional)</span>
+        <textarea id="i_msg" rows="3" maxlength="500" placeholder="For example: I would like to visit this weekend"></textarea>
+      </label>
+      <p class="err" id="i_err" role="alert" hidden></p>
+      <div class="row end">
+        <button class="btn" type="button" data-close>Cancel</button>
+        <button class="btn primary" type="submit" id="i_save">Send to the owner</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgLeads" aria-labelledby="leadsH">
+  <div class="dlg form">
+    <div class="dlg-head">
+      <h2 id="leadsH">Interested customers</h2>
+      <button class="x" type="button" data-close aria-label="Close">&times;</button>
+    </div>
+    <p class="hint">People who pressed “I am interested” on a property after signing in with Google. Newest first.</p>
+    <p class="err" id="ld_err" role="alert" hidden></p>
+    <ul class="mlist" id="leadList"></ul>
   </div>
 </dialog>
 

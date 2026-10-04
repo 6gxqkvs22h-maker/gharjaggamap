@@ -18,6 +18,8 @@ const sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY)
 // To open another district later, set DISTRICT and MAP_AREA in js/config.js.
 const DISTRICT = CFG.DISTRICT || 'Kathmandu';
 // The address of the home page, so a property can have its own address: /property/<id>
+// True when a customer has just come back from Google after pressing "I am interested".
+const cameBack = /[?&]interested=1/.test(location.search);
 const BASE = location.pathname.replace(/index\.html$/, '').replace(/property\/[\w-]+\/?$/, '') || '/';
 
 /* ---------- what each kind of property asks for ----------
@@ -252,7 +254,35 @@ const cnum = c => (((c.color || 1) - 1) % 8) + 1;
 const cvar = c => 'var(--k' + cnum(c) + ')';
 const mvar = c => 'var(--m' + cnum(c) + ')';
 const shapeOf = c => SHAPES[(c.shape || 0) % SHAPES.length];
-const catIcon = c => '<svg class="ph-ico" viewBox="-13 -13 26 26" aria-hidden="true">' + shapeOf(c) + '</svg>';
+// One drawn icon for each kind of property. The colour comes from the category (--c).
+const D = '#0B1210';
+const ICONS = {
+  land: '<path d="M24 22 5.5 31 24 40l18.5-9z" fill="var(--c)"/><path d="M11 33.7 5.5 36.4 24 45.4l18.5-9-5.5-2.7L24 40z" fill="var(--c)" opacity=".5"/><path d="M14.5 30.4 24 25.8l9.5 4.6M19.5 33 24 30.8l4.5 2.2" fill="none" stroke="' + D + '" stroke-opacity=".35" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<path d="M24 23V11.5" fill="none" stroke="var(--c)" stroke-width="2.6" stroke-linecap="round"/><path d="M24 17.5c-.6-5-4.2-7.3-9.2-7.3 0 5.2 3.9 8.3 9.2 7.3zM24 12.5c.6-4.6 3.9-6.8 8.6-6.8 0 4.9-3.7 7.7-8.6 6.8z" fill="var(--c)"/>',
+  house: '<path d="M9.5 23.5V41a2.5 2.5 0 0 0 2.5 2.5h24a2.5 2.5 0 0 0 2.5-2.5V23.5L24 11z" fill="var(--c)" opacity=".62"/><path d="M5 24.5 24 8l19 16.5" fill="none" stroke="var(--c)" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<rect x="17.5" y="26" width="13" height="13" rx="2.2" fill="' + D + '"/><path d="M24 27.5v10M19 32.5h10" stroke="var(--c)" stroke-width="2.2" stroke-linecap="round"/>',
+  business: '<path d="M10 21h28v20a2.5 2.5 0 0 1-2.5 2.5h-23A2.5 2.5 0 0 1 10 41z" fill="var(--c)" opacity=".62"/><path d="M10 6.5h28l4.5 12.5a4.63 4.63 0 0 1-9.25 0 4.63 4.63 0 0 1-9.25 0 4.63 4.63 0 0 1-9.25 0 4.63 4.63 0 0 1-9.25 0z" fill="var(--c)"/>' +
+    '<path d="M19 43.5V33a5 5 0 0 1 10 0v10.5z" fill="' + D + '"/>',
+  shutter: '<rect x="8.5" y="21" width="31" height="22.5" rx="2" fill="var(--c)" opacity=".62"/><path d="M4.5 20.5 24 7.5l19.5 13v3.2h-39z" fill="var(--c)"/>' +
+    '<path d="M13.5 29h21M13.5 33.8h21M13.5 38.6h21" fill="none" stroke="' + D + '" stroke-opacity=".7" stroke-width="2.6" stroke-linecap="round"/>',
+  room: '<rect x="11" y="24" width="31" height="9" rx="4.5" fill="var(--c)" opacity=".62"/><rect x="11.5" y="17.5" width="12" height="8" rx="4" fill="var(--c)"/>' +
+    '<path d="M7 11v30.5M7 35h34.5v6.5" fill="none" stroke="var(--c)" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  flat: '<path d="M26.5 43V19.5l13 4V43z" fill="var(--c)" opacity=".62"/><path d="M8.5 43V11.5l15-5V43z" fill="var(--c)"/>' +
+    '<path d="M13 16.5h6V21h-6zM13 24.5h6V29h-6zM13 32.5h6V37h-6zM30.5 26.5H35V31h-4.5zM30.5 34H35v4.5h-4.5z" fill="' + D + '" fill-opacity=".72"/><path d="M5 43.5h38" stroke="var(--c)" stroke-width="2.6" stroke-linecap="round"/>'
+};
+const kindIcon = (kind, cls) => '<svg class="kico' + (cls ? ' ' + cls : '') + '" viewBox="0 0 48 48" aria-hidden="true">' + (ICONS[kind] || ICONS.house) + '</svg>';
+const catIcon = c => kindIcon(kindOf(c), 'ph-ico');
+// A photo that fails to load is replaced by the category icon, so a card never shows an empty box.
+const imgTag = (url, c, alt) => '<img src="' + esc(url) + '" alt="' + esc(alt || '') + '" loading="lazy" data-k="' + kindOf(c) + '" data-c="' + cnum(c) + '">';
+document.addEventListener('error', e => {
+  const t = e.target;
+  if (!t || t.tagName !== 'IMG' || !t.dataset.k) return;
+  const span = document.createElement('span');
+  span.className = t.closest('.fmain') ? 'fnone' : 'noimg';
+  span.style.setProperty('--c', 'var(--k' + (parseInt(t.dataset.c, 10) || 1) + ')');
+  span.innerHTML = kindIcon(t.dataset.k, 'ph-ico');
+  t.replaceWith(span);
+}, true);
 const catName = c => String(c.label || '').replace(/\s+(for\s+)?rent$/i, '') || 'Property';
 // The line a visitor reads first: "Land for sale", "2 BHK Flat for rent", "Office for rent".
 function headline(l) {
@@ -415,10 +445,14 @@ const placeName = l => String(l.place || '').split(',')[0].trim() || 'Other';
 const placeKey = l => placeName(l).toLowerCase();
 let budget = null, budgetIds = null, selectedId = null;
 let owner = false, busy = false, aiOn = false, aiCtl = null;
+let customer = null;          // a visitor who continued with Google: { id, email, name }
+let googleOn = CFG.GOOGLE_LOGIN === true;   // found out from Supabase at start, unless set in js/config.js
+let myInterest = new Set();   // the properties this customer already told the owner about
+let leads = [];               // for the owner: everyone who pressed "I am interested"
 const byId = id => state.listings.find(l => l.id === id) || null;
 // Visitors never see a listing marked unavailable (the database does not send it to them either).
 const shown = () => owner ? state.listings : state.listings.filter(l => l.status !== 'unavailable');
-const dlgDetail = $('#dlgDetail'), dlgContact = $('#dlgContact'), dlgEdit = $('#dlgEdit'), dlgSite = $('#dlgSite'), dlgCats = $('#dlgCats'), dlgLogin = $('#dlgLogin'), dlgManage = $('#dlgManage'), dlgConfirm = $('#dlgConfirm');
+const dlgDetail = $('#dlgDetail'), dlgContact = $('#dlgContact'), dlgEdit = $('#dlgEdit'), dlgSite = $('#dlgSite'), dlgCats = $('#dlgCats'), dlgLogin = $('#dlgLogin'), dlgManage = $('#dlgManage'), dlgConfirm = $('#dlgConfirm'), dlgInterest = $('#dlgInterest'), dlgLeads = $('#dlgLeads'), dlgChat = $('#dlgChat');
 
 // Dialogs can sit on top of each other (Manage listings, then a property, then Contact). This keeps their order.
 const stack = [];
@@ -462,16 +496,16 @@ map.on('resize', () => lockZoom(map));
 const markLayer = L.layerGroup().addTo(map);
 let mapItems = [];
 
-const PIN = '<svg viewBox="0 0 30 40" aria-hidden="true"><path class="pin-body" d="M15 38.5S3.5 24.6 3.5 14.6a11.5 11.5 0 0 1 23 0c0 10-11.5 23.9-11.5 23.9Z"/><circle class="pin-hole" cx="15" cy="14.6" r="4.4"/></svg>';
 function pinIcon(l, cls) {
+  const c = catOf(l.type);
   return L.divIcon({
     className: 'pin-ico' + (l.status !== 'available' ? ' sold' : '') + (l.id === selectedId ? ' sel' : '') + (cls ? ' ' + cls : ''),
-    html: PIN, iconSize: [30, 40], iconAnchor: [15, 39]
+    html: '<span class="pin" style="--c:' + cvar(c) + '">' + kindIcon(kindOf(c)) + '</span>', iconSize: [40, 48], iconAnchor: [20, 47]
   });
 }
-function addPin(l) {
+function addPin(l, at) {
   const label = headline(l) + ': ' + l.title + ', ' + priceText(l);
-  L.marker([l.lat, l.lng], { icon: pinIcon(l), title: label, alt: label, zIndexOffset: l.id === selectedId ? 1000 : 0 })
+  L.marker(at || [l.lat, l.lng], { icon: pinIcon(l), title: label, alt: label, zIndexOffset: l.id === selectedId ? 1000 : 0 })
     .on('click', () => openDetail(l.id)).addTo(markLayer);
 }
 function fitPoints(pts) {
@@ -487,12 +521,18 @@ function drawMap() {
   const clusters = [];
   mapItems.forEach(l => {
     const p = map.project([l.lat, l.lng], z);
-    const c = z >= 18 ? null : clusters.find(k => Math.abs(k.x - p.x) < 26 && Math.abs(k.y - p.y) < 30);
+    const c = z >= 18 ? null : clusters.find(k => Math.abs(k.x - p.x) < 36 && Math.abs(k.y - p.y) < 40);
     if (c) { c.items.push(l); const n = c.items.length; c.x += (p.x - c.x) / n; c.y += (p.y - c.y) / n; }
     else clusters.push({ x: p.x, y: p.y, items: [l] });
   });
   clusters.forEach(c => {
     if (c.items.length === 1) { addPin(c.items[0]); return; }
+    // Up to six close neighbours are spread in a small ring around their shared spot. Zooming in puts each on its exact place.
+    if (c.items.length <= 6) {
+      const n = c.items.length, r = Math.max(21, 20 / Math.sin(Math.PI / n));
+      c.items.forEach((l, i) => { const a = -Math.PI / 2 + i * 2 * Math.PI / n; addPin(l, map.unproject([c.x + r * Math.cos(a), c.y + r * Math.sin(a)], z)); });
+      return;
+    }
     const samePlace = c.items.every(l => placeKey(l) === placeKey(c.items[0]));
     const name = samePlace ? placeName(c.items[0]) : '';
     const label = (name ? name + ': ' : '') + c.items.length + ' properties here. Tap to zoom in.';
@@ -605,8 +645,8 @@ const shortName = l => autoTitle(kindOf(catOf(l.type)), l.sub, l.d, areaText(l),
 const kmShort = l => { const k = kmFrom(l); return k == null ? '' : (k < 1 ? Math.round(k * 100) * 10 + ' m' : (k < 10 ? Math.round(k * 10) / 10 : Math.round(k)) + ' km'); };
 const PLACE_ICO = '<svg class="pl" viewBox="0 0 30 40" aria-hidden="true"><path d="M15 38.5S3.5 24.6 3.5 14.6a11.5 11.5 0 0 1 23 0c0 10-11.5 23.9-11.5 23.9Z" fill="currentColor"/><circle cx="15" cy="14.6" r="4.4" fill="var(--bg)"/></svg>';
 function renderHome() {
-  $('#topChips').innerHTML = [['all', 'All']].concat(state.cats.map(c => [c.id, catName(c)])).map(([k, label]) =>
-    '<button class="chip" type="button" data-type="' + esc(k) + '" aria-pressed="' + (filter.type === k) + '">' + esc(label) + '</button>').join('');
+  $('#topChips').innerHTML = '<button class="chip" type="button" data-type="all" aria-pressed="' + (filter.type === 'all') + '">All</button>' + state.cats.map(c =>
+    '<button class="chip" type="button" data-type="' + esc(c.id) + '" aria-pressed="' + (filter.type === c.id) + '" style="--c:' + cvar(c) + '">' + kindIcon(kindOf(c)) + esc(catName(c)) + '</button>').join('');
   const pool = shown().filter(l => l.status === 'available' && (filter.type === 'all' || l.type === filter.type));
   // Featured: the listings the owner ticked. Until some are ticked, the newest ones with photos are shown as "Latest".
   let feat = pool.filter(l => l.featured);
@@ -617,7 +657,7 @@ function renderHome() {
   $('#fcar').innerHTML = feat.length ? feat.map(l => {
     const c = catOf(l.type), ph = l.photos[0], km = kmShort(l);
     return '<div class="fcard" data-id="' + esc(l.id) + '"><button class="fmain" type="button" data-open aria-label="' + esc(headline(l) + ': ' + l.title + ', ' + priceText(l)) + '">' +
-      (ph ? '<img src="' + esc(ph) + '" alt="" loading="lazy">' : '<span class="fnone" style="--c:' + cvar(c) + '">' + catIcon(c) + '</span>') +
+      (ph ? imgTag(ph, c) : '<span class="fnone" style="--c:' + cvar(c) + '">' + catIcon(c) + '</span>') +
       '<span class="fshade"></span>' + (l.featured ? '<span class="fbadge">Featured</span>' : '') +
       '<span class="ftext"><span class="fkind">' + esc(headline(l)) + '</span><span class="fsize">' + esc(shortName(l)) + '</span><span class="fprice">' + esc(compactPrice(l)) + '</span>' +
       '<span class="fmeta"><span>' + PLACE_ICO + esc(placeName(l) === 'Other' ? (l.district || '') : placeName(l)) + '</span>' + (km ? '<span>' + PLACE_ICO + km + ' away</span>' : '') + '</span></span></button>' + heartBtn(l) + '</div>';
@@ -632,7 +672,7 @@ function renderHome() {
   $('#nrow').innerHTML = near.map(l => {
     const c = catOf(l.type), ph = l.photos[0], km = kmShort(l);
     return '<div class="ncard" data-id="' + esc(l.id) + '"><button class="nmain" type="button" data-open>' +
-      '<span class="nimg" style="--c:' + cvar(c) + '">' + (ph ? '<img src="' + esc(ph) + '" alt="" loading="lazy">' : catIcon(c)) + '</span>' +
+      '<span class="nimg" style="--c:' + cvar(c) + '">' + (ph ? imgTag(ph, c) : catIcon(c)) + '</span>' +
       '<span class="ntext"><b>' + esc(shortName(l)) + '</b><span class="nprice">' + esc(compactPrice(l)) + '</span><span class="nplace">' + esc(placeName(l) === 'Other' ? (l.district || '') : placeName(l)) + '</span>' +
       (km ? '<span class="nkm">' + PLACE_ICO + km + '</span>' : '') + '</span></button>' + heartBtn(l) + '</div>';
   }).join('');
@@ -726,7 +766,7 @@ function renderList() {
       const facts = cardFacts(l).concat(kmText(kmFrom(l)) || []);
       return '<li class="card' + (l.id === selectedId ? ' sel' : '') + '" data-id="' + esc(l.id) + '">' +
         '<button class="card-main" type="button" data-open>' +
-        '<span class="thumb" style="--c:' + cvar(c) + '">' + (ph ? '<img src="' + esc(ph) + '" alt="" loading="lazy">' : catIcon(c)) +
+        '<span class="thumb" style="--c:' + cvar(c) + '">' + (ph ? imgTag(ph, c) : catIcon(c)) +
         (l.photos.length > 1 ? '<span class="pcount">' + l.photos.length + ' photos</span>' : '') + '</span>' +
         '<span class="card-body"><span class="card-top">' + badges(l) + '</span>' +
         '<span class="card-title">' + esc(l.title) + '</span>' +
@@ -1006,7 +1046,7 @@ function openDetail(id) {
   const feats = featuresOf(l);
   let h = '<div class="dlg-head"><div><div class="card-top">' + badges(l) + '</div><h2>' + esc(l.title) + '</h2></div>' +
     '<button class="x" type="button" data-close aria-label="Close">&times;</button></div>';
-  h += '<div class="gal"><div class="gal-main' + (photos.length ? '' : ' empty') + '" style="--c:' + cvar(cat) + '" id="galMain">' + (photos.length ? '<img src="' + esc(photos[0]) + '" alt="Photo 1 of ' + esc(l.title) + '">' : catIcon(cat)) + '</div>';
+  h += '<div class="gal"><div class="gal-main' + (photos.length ? '' : ' empty') + '" style="--c:' + cvar(cat) + '" id="galMain">' + (photos.length ? imgTag(photos[0], cat, 'Photo 1 of ' + l.title) : catIcon(cat)) + '</div>';
   h += heartBtn(l);
   if (photos.length > 1) h += '<div class="gal-thumbs">' + photos.map((p, i) => '<button type="button" data-ph="' + i + '" aria-pressed="' + (i === 0) + '" aria-label="Photo ' + (i + 1) + '"><img src="' + esc(p) + '" alt="" loading="lazy"></button>').join('') + '</div>';
   h += '</div>';
@@ -1015,7 +1055,8 @@ function openDetail(id) {
     (placeLine(l) ? '<p class="where">' + esc(placeLine(l)) + '</p>' : '') + '</div>';
   h += '<div class="row detail-actions"><button class="btn primary" type="button" data-talk>Contact</button>' +
     '<a class="btn" href="https://www.google.com/maps/dir/?api=1&amp;destination=' + (+l.lat).toFixed(6) + ',' + (+l.lng).toFixed(6) + '" target="_blank" rel="noopener noreferrer">Get directions</a>' +
-    '<button class="btn" type="button" data-share>Share link</button></div>';
+    '<button class="btn" type="button" data-share>Share link</button>' +
+    (!owner && (googleOn || customer) ? '<button class="btn wide' + (myInterest.has(l.id) ? ' done' : '') + '" type="button" data-interest>' + (myInterest.has(l.id) ? 'Interest sent to the owner' : 'I am interested') + '</button>' : '') + '</div>';
   h += '<dl class="facts">' + detailFacts(l).map(f => '<div><dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1]) + '</dd></div>').join('') + '</dl>';
   if (feats.length) h += '<div class="feats"><span class="feats-h">It has</span><span class="cfacts">' + feats.map(f => '<span>' + esc(f) + '</span>').join('') + '</span></div>';
   if (l.desc) h += '<p class="desc">' + esc(l.desc) + '</p>';
@@ -1066,6 +1107,7 @@ $('#detailBody').addEventListener('click', e => {
   if (!l) return;
   if (t.closest('[data-talk]')) openContact(id);
   else if (t.closest('[data-share]')) shareLink(l, t.closest('[data-share]'));
+  else if (t.closest('[data-interest]')) openInterest(id);
   else if (t.closest('[data-showmap]')) { dlgDetail.close(); if (dlgManage.open) dlgManage.close(); showOnMap(id); }
   else if (t.closest('[data-edit]')) { dlgDetail.close(); openEdit(id); }
   else if (t.closest('[data-del]')) askDelete(id);
@@ -1131,6 +1173,7 @@ dlgMenu.addEventListener('click', e => {
   const go = b.dataset.go;
   dlgMenu.close();
   if (go === 'help') show(dlgHelp);
+  else if (go === 'chat') openChat();
   else if (go === 'saved') { filter.saved = true; rerun(); goTo('allH'); }
   else goTo(go);
 });
@@ -1207,23 +1250,221 @@ function setOwner(on) {
   $('#loginLink').hidden = owner;
   $('#loginBtn').hidden = owner;
   document.body.classList.toggle('has-owner', owner);
+  renderAccount();
   renderList();
+}
+// The account lines in the side menu: who is signed in, Continue with Google, Sign out.
+function renderAccount() {
+  const inNow = owner || !!customer;
+  const t = $('#acctText');
+  t.textContent = owner ? 'Signed in as the owner.' : customer ? 'Signed in as ' + customer.name + ' (' + customer.email + ').' : '';
+  t.hidden = !inNow;
+  $('#googleBtn').hidden = inNow || !googleOn;
+  $('#signOutBtn').hidden = !inNow;
+  $('#leadsBtn').textContent = 'Interested' + (leads.length ? ' (' + leads.length + ')' : '');
 }
 async function checkOwner() {
   try {
     const s = await sb.auth.getSession();
-    if (!s.data || !s.data.session) { setOwner(false); return 'out'; }
+    const u = s.data && s.data.session && s.data.session.user;
+    if (!u) { customer = null; setOwner(false); return 'out'; }
     const r = await sb.rpc('is_admin');
     if (r.error) throw r.error;
     if (r.data === true) {
+      customer = null;
       // The owner also gets the listings hidden from visitors, and a warning if the database is not updated yet.
       try { await loadAll(); } catch (e) {}
-      sb.from('listings').select('deal_type,details,featured').limit(1).then(p => { $('#dbNote').hidden = !p.error; }, () => {});
+      Promise.all([sb.from('listings').select('deal_type,details,featured').limit(1), loadLeads()]).then(p => { $('#dbNote').hidden = !(p[0].error || p[1]); }, () => {});
+    } else {
+      const m = u.user_metadata || {};
+      customer = { id: u.id, email: String(u.email || ''), name: String(m.full_name || m.name || String(u.email || '').split('@')[0] || 'Customer').slice(0, 120) };
+      sb.from('interests').select('listing_id').eq('user_id', u.id).then(q => {
+        if (!q.error && Array.isArray(q.data)) { myInterest = new Set(q.data.map(x => x.listing_id).filter(Boolean)); if (dlgDetail.open && byId($('#detailBody').dataset.id)) openDetail($('#detailBody').dataset.id); }
+      }, () => {});
     }
     setOwner(r.data === true);
     return r.data === true ? 'owner' : 'not_owner';
   } catch (e) { setOwner(false); return 'error'; }
 }
+
+/* ---------- customers: Continue with Google, "I am interested" ---------- */
+// Google sign-in has to be switched on in Supabase first (see SETUP.md). The site asks Supabase whether it is.
+if (CFG.GOOGLE_LOGIN == null) {
+  fetch(String(CFG.SUPABASE_URL).replace(/\/$/, '') + '/auth/v1/settings', { headers: { apikey: CFG.SUPABASE_ANON_KEY } })
+    .then(r => r.ok ? r.json() : null).then(j => { googleOn = !!(j && j.external && j.external.google); renderAccount(); }).catch(() => {});
+}
+async function googleSignIn(backTo) {
+  try {
+    const r = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: backTo || location.origin + BASE } });
+    if (r.error) throw r.error;
+  } catch (e) { console.error(e); toast('Google sign-in could not start. Try again in a moment.'); }
+}
+$('#googleBtn').addEventListener('click', () => googleSignIn());
+let intId = null;
+function openInterest(id) {
+  const l = byId(id); if (!l || owner) return;
+  intId = id;
+  $('#intAbout').innerHTML = '<span class="hint">Property</span><strong>' + esc(l.title) + '</strong><span>' + esc(priceText(l)) + '</span>';
+  $('#intOut').hidden = !!customer;
+  $('#intIn').hidden = !customer;
+  if (customer) {
+    $('#intWho').textContent = 'Sending as ' + customer.name + ' (' + customer.email + '). The owner will reply to you directly.';
+    $('#i_err').hidden = true;
+    $('#i_save').textContent = myInterest.has(id) ? 'Send again' : 'Send to the owner';
+  }
+  show(dlgInterest);
+}
+// After Google, the customer comes back to the same property with the form open.
+$('#intGoogle').addEventListener('click', () => googleSignIn(listingUrl(intId) + '?interested=1'));
+$('#intForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const l = byId(intId), err = $('#i_err'), btn = $('#i_save');
+  if (!l || !customer || btn.disabled) return;
+  err.hidden = true; btn.disabled = true;
+  try {
+    const r = await sb.from('interests').upsert({
+      listing_id: l.id, listing_title: l.title.slice(0, 120), user_id: customer.id, email: customer.email, name: customer.name,
+      phone: $('#i_phone').value.trim().slice(0, 30), message: $('#i_msg').value.trim().slice(0, 500)
+    }, { onConflict: 'user_id,listing_id' }).select('id');
+    if (r.error) throw r.error;
+    myInterest.add(l.id);
+    dlgInterest.close();
+    if (dlgDetail.open && $('#detailBody').dataset.id === l.id) openDetail(l.id);
+    toast('Sent. The owner will contact you.');
+  } catch (e2) {
+    console.error(e2);
+    err.textContent = /failed to fetch|network/i.test(String(e2 && e2.message)) ? 'No connection. Check the internet and try again.' : 'Could not send it just now. Press Contact to reach the owner instead.';
+    err.hidden = false;
+  } finally { btn.disabled = false; }
+});
+
+/* ---------- owner: interested customers ---------- */
+// Returns true when the table is missing, which means the database update has not been run yet.
+async function loadLeads() {
+  const r = await sb.from('interests').select('*').order('created_at', { ascending: false });
+  if (r.error) { leads = []; renderAccount(); return true; }
+  leads = Array.isArray(r.data) ? r.data : [];
+  renderAccount();
+  return false;
+}
+function renderLeads() {
+  $('#leadList').innerHTML = leads.length ? leads.map(d => {
+    const l = d.listing_id ? byId(d.listing_id) : null, title = (l && l.title) || d.listing_title || 'A property that was deleted';
+    const when = d.created_at ? new Date(d.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    const tel = String(d.phone || '').replace(/[^\d+]/g, '');
+    const mail = /^[^\s@<>"']+@[^\s@<>"']+$/.test(d.email || '') ? 'mailto:' + encodeURIComponent(d.email).replace(/%40/g, '@') + '?subject=' + encodeURIComponent(title) : '';
+    return '<li class="mrow lead" data-lead="' + esc(d.id) + '"><div class="mbody"><strong>' + esc(d.name || d.email || 'Customer') + '</strong>' +
+      '<span>' + esc(title) + '</span>' + (d.message ? '<span class="lmsg">' + esc(d.message) + '</span>' : '') +
+      '<span class="hint">' + esc([d.email, d.phone, when].filter(Boolean).join(' · ')) + '</span></div>' +
+      '<div class="mact">' + (mail ? '<a class="btn small primary" href="' + esc(mail) + '">Email</a>' : '') +
+      (tel.length >= 7 ? '<a class="btn small" href="tel:' + esc(tel) + '">Call</a>' : '') +
+      (l ? '<button class="btn small" type="button" data-view="' + esc(l.id) + '">View property</button>' : '') +
+      '<button class="btn small danger" type="button" data-rmlead>Remove</button></div></li>';
+  }).join('') : '<li class="empty">Nobody has pressed “I am interested” yet. Customers see that button on a property once Google sign-in is switched on in Supabase.</li>';
+}
+$('#leadsBtn').addEventListener('click', async () => { $('#ld_err').hidden = true; renderLeads(); show(dlgLeads); await loadLeads(); renderLeads(); });
+$('#leadList').addEventListener('click', async e => {
+  const v = e.target.closest('[data-view]');
+  if (v) { openDetail(v.dataset.view); return; }
+  if (!e.target.closest('[data-rmlead]')) return;
+  const id = e.target.closest('[data-lead]').dataset.lead;
+  await mutate($('#ld_err'), async () => {
+    const r = await sb.from('interests').delete().eq('id', id).select('id');
+    if (r.error) throw r.error;
+    leads = leads.filter(x => x.id !== id);
+  }, 'Removed.');
+  renderLeads(); renderAccount();
+});
+
+/* ---------- ask about properties (chat) ----------
+   Works without any key: it searches the listings by type, place, budget and bedrooms.
+   When GEMINI_API_KEY is added in Vercel, /api/chat answers instead and this search stays as the backup. */
+const chat = { ai: false, msgs: [], busy: false };
+fetch('/api/chat').then(r => r.ok ? r.json() : null).then(j => { chat.ai = !!(j && j.enabled); }).catch(() => {});
+const KIND_WORDS = [['flat', /flat|apartment|bhk|फ्ल्याट/], ['room', /room|kotha|कोठा/], ['shutter', /shutter|sutter|सटर|shop/], ['business', /business|office|commercial|hotel|restaurant|warehouse|व्यापार/], ['house', /house|ghar|घर|bungalow/], ['land', /land|jagga|जग्गा|plot|ropani|anna|aana/]];
+function findListings(q) {
+  const s = ' ' + String(q).toLowerCase() + ' ';
+  const w = {};
+  if (/rent|bhada|भाडा|kiraya|per month|monthly/.test(s)) w.deal = 'rent'; else if (/\bbuy|\bsale|\bsell|kinna|किन्न|bikri|बिक्री|purchase/.test(s)) w.deal = 'sale';
+  w.kind = (KIND_WORDS.find(k => k[1].test(s)) || [])[0] || '';
+  const names = Array.from(new Set(shown().map(placeName))).filter(n => n.length >= 3 && n !== 'Other').sort((a, b) => b.length - a.length);
+  w.place = names.find(n => s.indexOf(n.toLowerCase()) >= 0) || '';
+  const bhk = /(\d)\s*(?:bhk|bed)/.exec(s); w.beds = bhk ? +bhk[1] : 0;
+  const m = /(?:rs\.?|npr|under|below|upto|up to|budget|within|less than|max|सम्म)\s*([\d,.]+\s*(?:crores?|cr|lakhs?|lacs?|करोड|लाख|k\b|thousand|hajar)?)|([\d,.]+\s*(?:crores?|cr|lakhs?|lacs?|करोड|लाख|k\b|thousand|hajar))|(\d{5,})/.exec(s);
+  const rentish = w.deal === 'rent' || (!w.deal && (w.kind === 'room' || w.kind === 'shutter'));
+  const money = m ? parseMoney(m[1] || m[2] || m[3], rentish) : null;
+  w.max = money ? money.value : 0;
+  if (!w.deal && w.max) w.deal = w.max < 5e5 ? 'rent' : 'sale';
+  if (!w.kind && !w.deal && !w.place && !w.beds && !w.max) return null;
+  let arr = shown().filter(l => l.status === 'available' && (!w.kind || kindOf(catOf(l.type)) === w.kind) && (!w.deal || l.deal === w.deal) &&
+    (!w.place || placeName(l) === w.place) && (!w.beds || bedsOf(l) >= w.beds) && (!w.max || (l.price > 0 && l.price <= w.max * 1.05)));
+  if (w.max) arr = arr.slice().sort((a, b) => b.price - a.price);
+  const what = (w.beds ? w.beds + '+ bedroom ' : '') + (w.kind ? (w.kind === 'business' ? 'commercial properties' : w.kind === 'land' ? 'land' : KIND_NAMES[w.kind].toLowerCase() + 's') : 'properties');
+  w.words = what + (w.deal ? (w.deal === 'rent' ? ' for rent' : ' for sale') : '') + (w.place ? ' in ' + w.place : '') + (w.max ? ' up to ' + fmtNPR(w.max).replace(/\u00a0/g, ' ') + (w.deal === 'rent' ? ' a month' : '') : '');
+  return { want: w, items: arr };
+}
+function localAnswer(q) {
+  const f = findListings(q);
+  if (!f) return { text: 'I can look up the properties here by type, place and budget. Try “land under 1 crore in Sanepa”, “2 BHK flat for rent” or “room in Kupondole”. For anything else, press Contact.', ids: [] };
+  const n = f.items.length;
+  if (!n) return { text: 'Nothing listed right now matches ' + f.want.words + '. Press Contact and the owner can tell you what is coming up.', ids: [] };
+  return { text: 'I found ' + n + ' ' + (n === 1 ? 'match' : 'matches') + ' for ' + f.want.words + '.' + (n > 5 ? ' Here are 5 of them.' : '') + ' Tap one to open it.', ids: f.items.slice(0, 5).map(l => l.id) };
+}
+function renderChat() {
+  const log = $('#chatLog');
+  log.innerHTML = chat.msgs.map(m => '<div class="msg ' + (m.role === 'bot' ? 'bot' : 'me') + '"><p>' + esc(m.text) + '</p>' +
+    (m.ids && m.ids.length ? '<div class="mres">' + m.ids.map(id => { const l = byId(id); return l ? '<button class="btn small" type="button" data-view="' + esc(id) + '"><b>' + esc(l.title) + '</b><span>' + esc(compactPrice(l)) + (placeName(l) !== 'Other' ? ' · ' + esc(placeName(l)) : '') + '</span></button>' : ''; }).join('') + '</div>' : '') +
+    (m.ai ? '<small>Written by AI. It can make mistakes, so confirm the details with the owner.</small>' : '') + '</div>').join('') +
+    (chat.busy ? '<div class="msg bot wait"><p>Looking…</p></div>' : '') +
+    '<div class="row"><button class="btn small" type="button" data-contact>Contact the owner</button></div>';
+  log.scrollTop = log.scrollHeight;
+}
+function openChat() {
+  if (!chat.msgs.length) chat.msgs.push({ role: 'bot', text: 'Namaste. Ask me about the properties listed here, for example “land under 1 crore in Sanepa” or “2 BHK flat for rent”.' });
+  renderChat();
+  show(dlgChat);
+}
+async function ask(q) {
+  chat.msgs.push({ role: 'me', text: q });
+  chat.busy = true; renderChat();
+  let out = null;
+  if (chat.ai) {
+    try {
+      const rows = shown().filter(l => l.status === 'available').slice(0, 60).map(l => ({
+        title: l.title, kind: headline(l), price: priceText(l).replace(/\u00a0/g, ' '), size: areaText(l), place: placeLine(l),
+        facts: cardFacts(l).concat(featuresOf(l)).join(', '), notes: String(l.desc || '').slice(0, 200)
+      }));
+      const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ site: state.site.name || DEF_SITE.name, messages: chat.msgs.slice(-8).map(m => ({ role: m.role, text: m.text })), listings: rows }) });
+      const j = await r.json().catch(() => null);
+      if (r.ok && j && j.text) {
+        const low = j.text.toLowerCase();
+        let ids = shown().filter(l => l.title.length > 5 && low.indexOf(l.title.toLowerCase()) >= 0).slice(0, 5).map(l => l.id);
+        if (!ids.length) { const f = findListings(q); if (f) ids = f.items.slice(0, 3).map(l => l.id); }
+        out = { text: j.text, ids: ids, ai: true };
+      }
+    } catch (e) {}
+  }
+  // No AI key yet, or the AI did not answer: the built-in search answers.
+  if (!out) out = localAnswer(q);
+  chat.busy = false;
+  chat.msgs.push({ role: 'bot', text: out.text, ids: out.ids, ai: !!out.ai });
+  if (chat.msgs.length > 40) chat.msgs = chat.msgs.slice(-40);
+  renderChat();
+}
+$('#chatForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const q = $('#chatIn').value.trim().slice(0, 300);
+  if (!q || chat.busy) return;
+  $('#chatIn').value = '';
+  ask(q);
+});
+$('#chatLog').addEventListener('click', e => {
+  const v = e.target.closest('[data-view]');
+  if (v) openDetail(v.dataset.view);
+  else if (e.target.closest('[data-contact]')) openContact(null);
+});
+
 const openLogin = () => { if (dlgMenu.open) dlgMenu.close(); $('#l_err').hidden = true; $('#l_pass').value = ''; show(dlgLogin); };
 $('#loginLink').addEventListener('click', openLogin);
 $('#loginBtn').addEventListener('click', openLogin);
@@ -1246,6 +1487,8 @@ $('#loginForm').addEventListener('submit', async e => {
 $('#signOutBtn').addEventListener('click', async () => {
   try { await sb.auth.signOut(); } catch (e) {}
   state.listings = state.listings.filter(l => l.status !== 'unavailable');
+  customer = null; myInterest = new Set(); leads = [];
+  if (dlgMenu.open) dlgMenu.close();
   setOwner(false); toast('Signed out.');
 });
 $('#addBtn').addEventListener('click', () => openEdit(null));
@@ -1263,7 +1506,7 @@ function renderManage() {
   $('#mList').innerHTML = arr.length ? arr.map(l => {
     const ph = (l.photos || []).find(okUrl), c = catOf(l.type);
     return '<li class="mrow" data-id="' + esc(l.id) + '">' +
-      '<span class="thumb" style="--c:' + cvar(c) + '">' + (ph ? '<img src="' + esc(ph) + '" alt="" loading="lazy">' : catIcon(c)) + '</span>' +
+      '<span class="thumb" style="--c:' + cvar(c) + '">' + (ph ? imgTag(ph, c) : catIcon(c)) + '</span>' +
       '<div class="mbody"><span class="card-top">' + badges(l) + '</span><strong>' + esc(l.title) + '</strong>' +
       '<span class="mprice">' + esc(priceText(l)) + '</span>' + (placeLine(l) ? '<span class="hint">' + esc(placeLine(l)) + '</span>' : '') + '</div>' +
       '<div class="mact"><button class="btn small" type="button" data-view>View</button><button class="btn small" type="button" data-edit>Edit</button>' +
@@ -1451,7 +1694,7 @@ function openEdit(id) {
   $('#editH').textContent = l ? 'Edit property' : 'Add property';
   $('#f_save').dataset.label = l ? 'Update property' : 'Save property';
   $('#f_save').textContent = $('#f_save').dataset.label;
-  $('#f_types').innerHTML = state.cats.map((c, i) => '<label><input type="radio" name="f_type" id="f_type_' + i + '" value="' + esc(c.id) + '"' + (c.id === draft.type ? ' checked' : '') + '><span>' + esc(catName(c)) + '</span></label>').join('');
+  $('#f_types').innerHTML = state.cats.map((c, i) => '<label><input type="radio" name="f_type" id="f_type_' + i + '" value="' + esc(c.id) + '"' + (c.id === draft.type ? ' checked' : '') + '><span style="--c:' + cvar(c) + '">' + kindIcon(kindOf(c)) + esc(catName(c)) + '</span></label>').join('');
   $('#f_title').value = l ? draft.title || '' : '';
   $('#f_unit').innerHTML = '';
   $('#f_area').value = draft.area && draft.area.v > 0 ? trimNum(draft.area.v) : '';
@@ -1639,7 +1882,7 @@ dlgEdit.addEventListener('close', () => { if (draft) { removePhotos(draft.photos
 function renderCats() {
   $('#catList').innerHTML = state.cats.map(c => {
     const n = state.listings.filter(l => l.type === c.id).length;
-    return '<li style="--c:' + cvar(c) + '"><svg viewBox="-12 -12 24 24" aria-hidden="true">' + shapeOf(c) + '</svg><span class="cn">' + esc(catName(c)) + '</span><span class="hint">' + KIND_NAMES[kindOf(c)] + ' form · ' + n + (n === 1 ? ' listing' : ' listings') + '</span>' +
+    return '<li style="--c:' + cvar(c) + '">' + kindIcon(kindOf(c)) + '<span class="cn">' + esc(catName(c)) + '</span><span class="hint">' + KIND_NAMES[kindOf(c)] + ' form · ' + n + (n === 1 ? ' listing' : ' listings') + '</span>' +
       (n === 0 && !DEF_CATS.some(d => d.id === c.id) ? '<button class="btn small" type="button" data-rmcat="' + esc(c.id) + '">Remove</button>' : '') + '</li>';
   }).join('');
 }
@@ -1705,13 +1948,13 @@ $('#siteForm').addEventListener('submit', async e => {
 });
 
 /* ---------- dialogs: close buttons and backdrop ---------- */
-[dlgDetail, dlgContact, dlgEdit, dlgSite, dlgCats, dlgLogin, dlgManage, dlgMenu, dlgHelp].forEach(d => {
+[dlgDetail, dlgContact, dlgEdit, dlgSite, dlgCats, dlgLogin, dlgManage, dlgMenu, dlgHelp, dlgInterest, dlgLeads, dlgChat].forEach(d => {
   d.addEventListener('click', e => {
     if (e.target.closest('[data-close]')) { d.close(); return; }
-    if (e.target === d && (d === dlgDetail || d === dlgContact || d === dlgMenu || d === dlgHelp)) d.close();
+    if (e.target === d && (d === dlgDetail || d === dlgContact || d === dlgMenu || d === dlgHelp || d === dlgChat)) d.close();
   });
 });
-[dlgDetail, dlgContact, dlgEdit, dlgSite, dlgCats, dlgLogin, dlgManage, dlgConfirm, dlgMenu, dlgHelp].forEach(d => {
+[dlgDetail, dlgContact, dlgEdit, dlgSite, dlgCats, dlgLogin, dlgManage, dlgConfirm, dlgMenu, dlgHelp, dlgInterest, dlgLeads, dlgChat].forEach(d => {
   d.addEventListener('close', () => {
     const i = stack.indexOf(d); if (i >= 0) stack.splice(i, 1);
     const t = $('#toast'); if (t.parentNode === d) (stack[stack.length - 1] || document.body).appendChild(t);
@@ -1741,7 +1984,8 @@ renderHeader(); renderLegend();
   // The owner may be opening a hidden listing, so wait for the sign-in check before giving up on the address.
   if (/property\/[\w-]+\/?$/.test(location.pathname) || /^#p-/.test(location.hash || '')) {
     const m = /property\/([\w-]+)\/?$/.exec(location.pathname) || /^#p-([\w-]+)$/.exec(location.hash);
-    if (m && byId(m[1])) { openFromUrl(); checkOwner(); } else checkOwner().then(openFromUrl);
+    const after = () => { if (cameBack && customer && dlgDetail.open) openInterest($('#detailBody').dataset.id); };
+    if (m && byId(m[1])) { openFromUrl(); checkOwner().then(after); } else checkOwner().then(openFromUrl).then(after);
   } else checkOwner();
   // GPS when the map opens: show the blue dot, keep the whole area in view.
   locate(() => {}, true);

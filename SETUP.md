@@ -76,6 +76,41 @@ This part has NOT been tested against Google's live service.
 3. Optional: add `GEMINI_MODEL` with the model name shown in AI Studio.
 4. Redeploy. If the button does not appear or answers fail, remove the key; nothing else is affected.
 
+## 8. Optional: customers continue with Google ("I am interested")
+
+When this is switched on, a property page gets an **I am interested** button. The customer continues with Google,
+can add a phone number and a message, and you see them under **Interested** in the owner bar with Email and Call buttons.
+Until it is switched on, the button is simply not shown and **Contact** works as before.
+This part has NOT been tested against the real Google and Supabase services.
+
+1. Run `supabase/schema.sql` in Supabase once more (it adds the table that stores interested customers).
+2. At console.cloud.google.com create a project, then **APIs & Services > OAuth consent screen**: choose External,
+   give the app a name and your email, and publish it.
+3. **APIs & Services > Credentials > Create credentials > OAuth client ID > Web application**.
+   - Authorized JavaScript origins: your site address, for example `https://gharjaggamap.vercel.app`
+   - Authorized redirect URIs: `https://YOUR-PROJECT.supabase.co/auth/v1/callback`
+     (the same address as `SUPABASE_URL` in `js/config.js`, with `/auth/v1/callback` added)
+4. In Supabase: **Authentication > Sign In / Providers > Google**. Switch it on and paste the Client ID and the
+   Client Secret from step 3. The secret goes ONLY here, never into a file of the site.
+5. In Supabase: **Authentication > URL Configuration**. Set Site URL to your site address and add
+   `https://gharjaggamap.vercel.app/**` to Redirect URLs (and the same for your own domain if you add one).
+6. Reload the site. The side menu now shows **Continue with Google**.
+
+If you sign in with Google using the owner email, you get the owner tools as well.
+
+## 9. Optional: AI answers in "Ask about properties"
+
+The side menu has **Ask about properties**. Without any key it already answers by searching your listings
+by type, place, budget and bedrooms. To let AI write the answers:
+
+1. Get a free key at aistudio.google.com.
+2. In Vercel: **Settings > Environment Variables**, add `GEMINI_API_KEY` with that key (the same key also switches
+   on "Ask AI to explain" in the budget helper). Optional: `GEMINI_MODEL`.
+3. Redeploy. If answers fail, the built-in search answers instead, so nothing breaks.
+
+This part has NOT been tested against Google's live service. The key stays on Vercel; visitors never see it.
+Each visitor is limited to about 20 questions in 10 minutes.
+
 ## Using the site
 
 - **Add a property:** Owner sign in, **+ Add property**. Choose what it is (Land, House, Business, Shutter, Room, Flat),
@@ -89,6 +124,10 @@ This part has NOT been tested against Google's live service.
 - **Home page:** a dark map with a pin for every property, then category buttons, a **Featured** carousel and a
   **Nearby** row. Switch **Featured** on for a listing in Manage listings (or tick it in the form) to put it in the
   carousel. Until you pick some, the newest listings are shown there under "Latest".
+- **Icons:** each kind of property has its own icon: on the map pins, the category buttons and wherever a listing
+  has no photo. Pins that are very close together are spread in a small ring so each can be tapped; zoom in to see
+  each one on its exact spot.
+- **Sign out:** it is in the side menu now (top left button).
 - **Hearts:** visitors tap the heart to save a property. It is kept on their own phone; no account is needed.
 - **How to use:** the button at the top opens a short guide. Paste a video link in **Site settings** and the guide
   gets a "Watch the video" button.

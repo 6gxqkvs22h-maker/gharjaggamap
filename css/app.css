@@ -733,3 +733,68 @@ body.has-owner .page{padding-bottom:120px}
 .fnav{top:40%}
 .card>.heart{left:16px;top:16px;width:44px;height:44px}
 @media (max-width:480px){.card>.heart{left:14px;top:14px}}
+
+/* ============================================================================
+   Update 4: drawn category icons (chips, form, placeholders, map pins),
+   Continue with Google + "I am interested", interested customers, chat.
+   ============================================================================ */
+.kico{width:24px;height:24px;flex:none;display:block}
+.thumb svg.kico,.nimg svg.kico{width:54px;height:54px}
+.gal-main svg.kico{width:72px;height:72px}
+.fnone svg.kico{width:92px;height:92px}
+.noimg{display:grid;place-items:center;width:100%;height:100%}
+.ph-ico .shape{opacity:1}
+.catlist svg.kico{width:28px;height:28px}
+#topChips .chip{gap:8px;padding-left:14px}
+#topChips .chip[data-type="all"]{padding-left:20px}
+#topChips .chip svg{width:22px;height:22px}
+#topChips .chip[aria-pressed="true"]{--c:var(--accent-ink) !important}
+.typegrid span{flex-direction:column;gap:6px;min-height:92px;padding-block:14px 12px}
+.typegrid span svg{width:40px;height:40px}
+.typegrid input:checked+span{background:var(--surface-2);color:var(--ink);border-color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent)}
+
+/* map pins: a round badge with the category icon and a small pointer */
+.pin-ico .pin{position:absolute;left:0;top:0;width:40px;height:40px;border-radius:50%;background:#0C1210;border:2.5px solid var(--c);display:grid;place-items:center;box-shadow:0 2px 7px rgba(0,0,0,.65)}
+.pin-ico .pin::after{content:"";position:absolute;left:50%;top:100%;margin-left:-6px;margin-top:1px;border:6px solid transparent;border-top:7px solid var(--c);border-bottom:0}
+.pin-ico .pin svg{width:24px;height:24px;filter:none;transform:none}
+.pin-ico.sold .pin{--c:#7C8A84 !important;opacity:.8}
+.pin-ico.sel .pin{border-color:var(--accent);transform:scale(1.22);transform-origin:50% 118%;box-shadow:0 0 0 4px rgba(114,224,127,.3),0 2px 7px rgba(0,0,0,.65)}
+.pin-ico.sel .pin::after{border-top-color:var(--accent)}
+.pin-ico.pick svg{width:34px;height:34px}
+
+/* property page: interested */
+.detail-actions .btn.wide{grid-column:1 / -1}
+.btn.done{border-color:var(--accent);color:var(--accent)}
+
+/* side menu account lines */
+.acct{display:grid;gap:10px;border-top:1px solid var(--line);padding-top:16px}
+.acct .hint{overflow-wrap:anywhere}
+
+/* interested customers */
+.mrow.lead{grid-template-columns:minmax(0,1fr)}
+.lmsg{white-space:pre-wrap;overflow-wrap:anywhere;border-left:3px solid var(--line);padding-left:10px}
+.lead .mbody>span{overflow-wrap:anywhere}
+
+/* chat */
+.dlg.chat{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:0;padding-bottom:0;height:min(680px,calc(100dvh - 34px))}
+.chatlog{overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding-block:16px;min-height:0}
+.msg{max-width:88%;display:grid;gap:8px;justify-items:start}
+.msg p{padding:11px 14px;border-radius:16px;border-bottom-left-radius:5px;background:var(--surface-2);border:1px solid var(--line);font-size:16.5px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.me{align-self:flex-end;justify-items:end}
+.msg.me p{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);border-radius:16px;border-bottom-right-radius:5px}
+.msg small{font-size:13px;color:var(--muted)}
+.msg.wait p{color:var(--muted)}
+.mres{display:grid;gap:8px;width:100%}
+.mres .btn{display:grid;justify-items:start;text-align:left;gap:3px;height:auto;padding:10px 14px;background:var(--surface)}
+.mres .btn b{font-weight:600;overflow-wrap:anywhere}
+.mres .btn span{font-size:14px;color:var(--muted)}
+.chatform{display:flex;gap:8px;margin-inline:calc(-1 * var(--dp));padding:12px var(--dp) calc(12px + env(safe-area-inset-bottom, 0px));border-top:1px solid var(--line);background:var(--surface)}
+.chatform input{flex:1 1 auto}
+@media (max-width:640px){
+  .dlg.chat{height:100dvh}
+  #dlgInterest{width:calc(100vw - 16px);max-width:calc(100vw - 16px);height:fit-content;max-height:calc(100dvh - 24px);margin:auto;border:1px solid var(--line);border-radius:14px}
+  #dlgInterest .dlg-head{padding-top:12px}
+  .typegrid span{min-height:86px}
+  .typegrid span svg{width:36px;height:36px}
+}
+.mact .btn.primary{background:var(--accent)}
