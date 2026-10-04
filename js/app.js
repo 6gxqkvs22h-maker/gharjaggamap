@@ -115,6 +115,8 @@ const mvar = c => 'var(--m' + cnum(c) + ')';
 const shapeOf = c => SHAPES[(c.shape || 0) % SHAPES.length];
 const catIcon = c => '<svg class="ph-ico" viewBox="-13 -13 26 26" aria-hidden="true">' + shapeOf(c) + '</svg>';
 const soldWord = l => isRent(l) ? 'Rented out' : 'Sold';
+// "Land for sale", "Room rent": the category plus what kind of deal it is.
+const typeLine = c => c.deal === 'rent' ? (/rent/i.test(c.label) ? c.label : c.label + ' for rent') : c.label + ' for sale';
 
 function groupIN(n) {
   const s = String(Math.round(n));
@@ -124,9 +126,9 @@ function groupIN(n) {
 const trimNum = n => String(Math.round(n * 100) / 100);
 function fmtNPR(n) {
   if (!isFinite(n) || n <= 0) return 'Price on request';
-  if (n >= 1e7) return 'रू ' + trimNum(n / 1e7) + ' crore';
-  if (n >= 1e5) return 'रू ' + trimNum(n / 1e5) + ' lakh';
-  return 'रू ' + groupIN(n);
+  if (n >= 1e7) return 'Rs.\u00a0' + trimNum(n / 1e7) + ' crore';
+  if (n >= 1e5) return 'Rs.\u00a0' + trimNum(n / 1e5) + ' lakh';
+  return 'Rs.\u00a0' + groupIN(n);
 }
 function parseMoney(str, rent) {
   if (!str) return null;
@@ -169,7 +171,7 @@ function rateOf(l) {
 function rateText(l) { const r = rateOf(l); return r ? fmtNPR(r.v) + ' per ' + r.label : ''; }
 function priceText(l) {
   if (!(l.price > 0)) return 'Price on request';
-  if (isRent(l)) return fmtNPR(l.price) + ' a month';
+  if (isRent(l)) return fmtNPR(l.price) + '/month';
   if (l.rateMode && rateOf(l)) return rateText(l);
   return fmtNPR(l.price);
 }
@@ -244,7 +246,7 @@ function pinIcon(l, cls) {
   const c = catOf(l.type);
   return L.divIcon({
     className: 'pin-ico' + (l.status === 'sold' ? ' sold' : '') + (l.id === selectedId ? ' sel' : '') + (cls ? ' ' + cls : ''),
-    html: '<svg viewBox="-13 -13 26 26" style="--c:' + mvar(c) + '">' + shapeOf(c) + '</svg>', iconSize: [30, 30], iconAnchor: [15, 15]
+    html: '<svg viewBox="-13 -13 26 26" style="--c:' + mvar(c) + '">' + shapeOf(c) + '</svg>', iconSize: [36, 36], iconAnchor: [18, 18]
   });
 }
 function addPin(l) {
@@ -299,7 +301,7 @@ function locate(then, quiet) {
   if (!quiet) toast('Finding where you are…');
   navigator.geolocation.getCurrentPosition(p => {
     me = { lat: p.coords.latitude, lng: p.coords.longitude };
-    if (!meMark) meMark = L.marker([me.lat, me.lng], { icon: L.divIcon({ className: 'me-wrap', html: '<span class="me-dot"></span>', iconSize: [0, 0] }), interactive: false, keyboard: false, zIndexOffset: 2000 }).addTo(map);
+    if (!meMark) meMark = L.marker([me.lat, me.lng], { icon: L.divIcon({ className: 'me-wrap', html: '<span class="me-dot"></span>', iconSize: [0, 0] }), interactive: false, keyboard: false, zIndexOffset: -1000 }).addTo(map);
     else meMark.setLatLng([me.lat, me.lng]);
     if (then) then();
     else if (inArea(me.lat, me.lng)) { map.setView([me.lat, me.lng], Math.max(map.getZoom(), 15)); toast('The blue dot is where you are.'); }
@@ -356,7 +358,7 @@ function matches(l) {
 }
 function badges(l) {
   const c = catOf(l.type);
-  return '<span class="badge" style="--c:' + cvar(c) + '">' + esc(c.label) + '</span>' +
+  return '<span class="badge" style="--c:' + cvar(c) + '">' + esc(typeLine(c)) + '</span>' +
     (l.status === 'sold' ? '<span class="tagx sold">' + soldWord(l) + '</span>' : '');
 }
 function renderList() {
@@ -398,16 +400,17 @@ function renderList() {
     ul.innerHTML = arr.map(l => {
       const ph = (l.photos || []).find(okUrl);
       const c = catOf(l.type);
-      const meta = [areaText(l), [l.place, l.district].filter(Boolean).join(', '), kmText(kmFrom(l))].filter(Boolean).join(' · ');
+      const place = [l.place, l.district].filter(Boolean).join(', ');
+      const meta = [areaText(l), priceSub(l), kmText(kmFrom(l))].filter(Boolean).join(' • ');
       return '<li class="card' + (l.id === selectedId ? ' sel' : '') + '" data-id="' + esc(l.id) + '">' +
         '<button class="card-main" type="button" data-open>' +
         '<span class="thumb" style="--c:' + cvar(c) + '">' + (ph ? '<img src="' + esc(ph) + '" alt="" loading="lazy">' : catIcon(c)) + '</span>' +
         '<span class="card-body"><span class="card-top">' + badges(l) + '</span>' +
         '<span class="card-title">' + esc(l.title) + '</span>' +
         '<span class="card-price">' + esc(priceText(l)) + '</span>' +
-        (priceSub(l) ? '<span class="card-rate">' + esc(priceSub(l)) + '</span>' : '') +
+        (place ? '<span class="card-place">' + esc(place) + '</span>' : '') +
         (meta ? '<span class="card-meta">' + esc(meta) + '</span>' : '') + '</span></button>' +
-        '<div class="card-foot"><button class="btn small" type="button" data-showmap>Show on map</button>' +
+        '<div class="card-foot"><button class="btn small" type="button" data-details>View details</button>' +
         '<button class="btn small primary" type="button" data-talk>Talk to me</button>' +
         (owner ? '<button class="btn small" type="button" data-edit>Edit</button>' : '') + '</div></li>';
     }).join('');
@@ -471,7 +474,7 @@ $('#cards').addEventListener('click', e => {
   if (e.target.closest('[data-clear]')) { filter.type = 'all'; filter.district = ''; filter.place = ''; clearBudget(); map.fitBounds(NEPAL_BOUNDS); return; }
   const li = e.target.closest('.card'); if (!li) return;
   const id = li.dataset.id;
-  if (e.target.closest('[data-showmap]')) showOnMap(id);
+  if (e.target.closest('[data-details]')) openDetail(id);
   else if (e.target.closest('[data-talk]')) openContact(id);
   else if (e.target.closest('[data-edit]')) openEdit(id);
   else if (e.target.closest('[data-open]')) openDetail(id);
@@ -619,7 +622,7 @@ function openDetail(id) {
   const photos = (l.photos || []).filter(okUrl);
   const D = districtByName(l.district);
   const cat = catOf(l.type);
-  const sub = [priceSub(l), !isRent(l) && l.price >= 1e5 ? 'रू ' + groupIN(l.price) : ''].filter(Boolean).join(' · ');
+  const sub = [priceSub(l), !isRent(l) && l.price >= 1e5 ? 'Rs.\u00a0' + groupIN(l.price) : ''].filter(Boolean).join(' · ');
   const facts = [];
   if (areaText(l)) facts.push(['Size', areaText(l) + (areaSqft(l) ? ' (' + areaSqft(l) + ')' : '')]);
   if (rateText(l)) facts.push(['Price per ' + rateOf(l).label, rateText(l)]);
@@ -629,19 +632,19 @@ function openDetail(id) {
   facts.push(['Status', l.status === 'sold' ? soldWord(l) : 'Available']);
   let h = '<div class="dlg-head"><div><div class="card-top">' + badges(l) + '</div><h2>' + esc(l.title) + '</h2></div>' +
     '<button class="x" type="button" data-close aria-label="Close">&times;</button></div>';
-  h += '<div class="gal"><div class="gal-main" style="--c:' + cvar(cat) + '" id="galMain">' + (photos.length ? '<img src="' + esc(photos[0]) + '" alt="Photo 1 of ' + esc(l.title) + '">' : catIcon(cat)) + '</div>';
+  h += '<div class="gal"><div class="gal-main' + (photos.length ? '' : ' empty') + '" style="--c:' + cvar(cat) + '" id="galMain">' + (photos.length ? '<img src="' + esc(photos[0]) + '" alt="Photo 1 of ' + esc(l.title) + '">' : catIcon(cat)) + '</div>';
   if (photos.length > 1) h += '<div class="gal-thumbs">' + photos.map((p, i) => '<button type="button" data-ph="' + i + '" aria-pressed="' + (i === 0) + '" aria-label="Photo ' + (i + 1) + '"><img src="' + esc(p) + '" alt="" loading="lazy"></button>').join('') + '</div>';
   h += '</div>';
   h += '<div><div class="price-big">' + esc(priceText(l)) + '</div>' + (sub ? '<p class="hint mono">' + esc(sub) + '</p>' : '') + '</div>';
   h += '<dl class="facts">' + facts.map(f => '<div><dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1]) + '</dd></div>').join('') + '</dl>';
   if (l.desc) h += '<p class="desc">' + esc(l.desc) + '</p>';
-  h += '<div class="row"><button class="btn primary" type="button" data-talk>Talk to me about this</button>' +
+  h += '<div class="row detail-actions"><button class="btn primary" type="button" data-talk>Talk to me about this</button>' +
     '<a class="btn" href="https://www.google.com/maps/dir/?api=1&amp;destination=' + (+l.lat).toFixed(6) + ',' + (+l.lng).toFixed(6) + '" target="_blank" rel="noopener noreferrer">Get directions</a>' +
     '<button class="btn" type="button" data-showmap>Show on this map</button>' +
     '<button class="btn" type="button" data-share>Copy link</button></div>';
   if (owner) h += '<div class="row owner-row"><button class="btn small" type="button" data-edit>Edit</button>' +
     '<button class="btn small" type="button" data-sold>' + (l.status === 'sold' ? 'Mark as available' : isRent(l) ? 'Mark as rented out' : 'Mark as sold') + '</button>' +
-    '<button class="btn small danger" type="button" data-del>Delete</button>' +
+    '<button class="btn small danger" type="button" data-del>Delete listing</button>' +
     '<span class="row" data-confirm hidden><strong>Delete this listing?</strong><button class="btn small danger" type="button" data-del-yes>Yes, delete</button><button class="btn small" type="button" data-del-no>Keep it</button></span></div>' +
     '<p class="err" role="alert" data-err hidden></p>';
   const box = $('#detailBody');
@@ -734,8 +737,8 @@ $('#talkBtn').addEventListener('click', () => openContact(null));
 function setBusy(on) {
   busy = on;
   ['#f_save', '#s_save', '#c_save', '#l_save', '#addBtn', '#siteBtn', '#catBtn'].forEach(s => { const b = $(s); if (b) b.disabled = on; });
-  $('#f_save').textContent = on ? 'Saving…' : 'Save and publish';
-  $('#s_save').textContent = on ? 'Saving…' : 'Save and publish';
+  $('#f_save').textContent = on ? 'Saving…' : ($('#f_save').dataset.label || 'Save property');
+  $('#s_save').textContent = on ? 'Saving…' : 'Save details';
 }
 function errText(e) {
   const m = String(e && (e.message || e.error_description || e.error) || '');
@@ -874,6 +877,8 @@ function openEdit(id) {
   draft = l ? JSON.parse(JSON.stringify(l)) : { id: null, type: state.cats.some(c => c.id === 'land') ? 'land' : state.cats[0].id, title: '', price: 0, area: { v: 0, u: 'aana' }, place: '', district: '', lat: null, lng: null, desc: '', photos: [], status: 'available' };
   draft.photos = (draft.photos || []).filter(okUrl).map(u => ({ url: u }));
   $('#editH').textContent = l ? 'Edit property' : 'Add property';
+  $('#f_save').dataset.label = l ? 'Update property' : 'Save property';
+  $('#f_save').textContent = $('#f_save').dataset.label;
   $('#f_types').innerHTML = state.cats.map((c, i) => '<label><input type="radio" name="f_type" id="f_type_' + i + '" value="' + esc(c.id) + '"' + (c.id === draft.type ? ' checked' : '') + '><span>' + esc(c.label) + '</span></label>').join('');
   if (!$('input[name="f_type"]:checked')) { const first = $('input[name="f_type"]'); if (first) first.checked = true; }
   $('#f_title').value = draft.title || '';
@@ -914,7 +919,7 @@ function formCat() { const el = $('input[name="f_type"]:checked'); return catOf(
 function readPrice() {
   const rent = formCat().deal === 'rent';
   const unit = UNITS[$('#f_unit').value] ? $('#f_unit').value : 'aana';
-  $('#f_priceLabel').textContent = rent ? 'Rent per month in rupees' : 'Price in rupees';
+  $('#f_priceLabel').textContent = rent ? 'Rent per month (Rs.)' : 'Price (Rs.)';
   $('#f_pmode').hidden = rent;
   $('#f_pmode').options[1].textContent = 'per ' + UNITS[unit][0];
   $('#f_soldLabel').textContent = rent ? 'Already rented out' : 'Already sold';
@@ -928,7 +933,7 @@ function readPrice() {
     out.textContent = av > 0 ? 'Total price works out to ' + fmtNPR(p.value * av) + ' (' + trimNum(av) + ' ' + UNITS[unit][0] + ' at ' + fmtNPR(p.value) + ' each).' : 'Add the size so the total price can be worked out.';
     return;
   }
-  out.textContent = 'Price will show as ' + fmtNPR(p.value) + ' (रू ' + groupIN(p.value) + ').';
+  out.textContent = 'Price will show as ' + fmtNPR(p.value) + ' (Rs. ' + groupIN(p.value) + ').';
 }
 ['#f_price', '#f_area', '#f_unit', '#f_pmode', '#f_types'].forEach(s => { $(s).addEventListener('input', readPrice); $(s).addEventListener('change', readPrice); });
 $('#f_coords').addEventListener('change', () => {

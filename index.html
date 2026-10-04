@@ -48,7 +48,7 @@
       <p>Type how much you can spend. You will see which properties fit, explained in plain words.</p>
     </div>
     <form id="budgetForm" class="budget-form" novalidate>
-      <label class="field grow" for="budgetInput"><span>Your budget in rupees</span>
+      <label class="field grow" for="budgetInput"><span>Your budget (Rs.)</span>
         <input id="budgetInput" type="text" placeholder="50 lakh, 1.2 crore or 5000000" autocomplete="off" enterkeyhint="go">
       </label>
       <label class="field" for="budgetType"><span>Looking for</span>
@@ -67,7 +67,7 @@
     <div id="budgetOut" class="budget-out" hidden>
       <div id="budgetText" aria-live="polite"></div>
       <div class="ai" id="aiBox" hidden>
-        <label class="field grow" for="aiWant"><span>What do you want it for? (optional)</span>
+        <label class="field grow" for="aiWant"><span>Purpose (optional)</span>
           <input id="aiWant" type="text" placeholder="For example: to build a family home near a road" autocomplete="off">
         </label>
         <div class="row">
@@ -111,9 +111,9 @@
 
 <div class="ownerbar" id="ownerBar" hidden>
   <span class="owner-title">Owner tools</span>
-  <button class="btn small" id="addBtn" type="button">+ Add property</button>
+  <button class="btn small primary" id="addBtn" type="button">+ Add property</button>
   <button class="btn small" id="catBtn" type="button">Categories</button>
-  <button class="btn small" id="siteBtn" type="button">Site details and contacts</button>
+  <button class="btn small" id="siteBtn" type="button">Site details</button>
   <button class="btn small" id="signOutBtn" type="button">Sign out</button>
 </div>
 
@@ -137,7 +137,7 @@
     </div>
 
     <fieldset class="plain">
-      <legend>What is it?</legend>
+      <legend>Category</legend>
       <div class="seg" id="f_types"></div>
     </fieldset>
 
@@ -146,7 +146,7 @@
     </label>
 
     <div class="grid2">
-      <div class="field"><span id="f_priceLabel">Price in rupees</span>
+      <div class="field"><span id="f_priceLabel">Price (Rs.)</span>
         <div class="pair">
           <input id="f_price" type="text" placeholder="45 lakh, 1.5 crore or 6500000" aria-labelledby="f_priceLabel" autocomplete="off">
           <select id="f_pmode" aria-label="What the price is for">
@@ -178,11 +178,12 @@
     </label>
     <p class="hint">Write the place the same way every time (Sanepa, Bhaisepati, Kupondole) so its listings are counted together.</p>
 
-    <div class="field"><span>Where is it? Tap the map, then drag the pin to the exact spot</span>
+    <div class="field"><span>Location</span>
+      <p class="hint">Tap the map to drop the pin, then drag it to the exact spot.</p>
       <div id="miniMap" class="mapbox minimap"></div>
     </div>
     <div class="grid2">
-      <label class="field" for="f_coords"><span>Or paste from Google Maps</span>
+      <label class="field" for="f_coords"><span>Coordinates</span>
         <input id="f_coords" type="text" placeholder="27.71720, 85.32400" autocomplete="off">
       </label>
       <div class="field"><span>District</span>
@@ -191,7 +192,7 @@
     </div>
     <div class="row">
       <button class="btn small" type="button" id="f_here">Use where I am standing now</button>
-      <span class="hint">Or in Google Maps, press and hold on the spot and paste the two numbers above.</span>
+      <span class="hint">Or press and hold the spot in Google Maps, then paste its two numbers into Coordinates.</span>
     </div>
 
     <label class="field" for="f_desc"><span>Details</span>
@@ -213,7 +214,7 @@
     <p class="err" id="f_err" role="alert" hidden></p>
     <div class="row end">
       <button class="btn" type="button" data-close>Cancel</button>
-      <button class="btn primary" type="submit" id="f_save">Save and publish</button>
+      <button class="btn primary" type="submit" id="f_save">Save property</button>
     </div>
   </form>
 </dialog>
@@ -228,10 +229,10 @@
       <label class="field" for="s_name"><span>Site name</span><input id="s_name" type="text" maxlength="40"></label>
       <label class="field" for="s_owner"><span>Your name</span><input id="s_owner" type="text" maxlength="40" placeholder="Shown on the contact panel"></label>
     </div>
-    <label class="field" for="s_tag"><span>One line under the name</span><input id="s_tag" type="text" maxlength="90"></label>
+    <label class="field" for="s_tag"><span>Tagline</span><input id="s_tag" type="text" maxlength="90"></label>
     <div class="grid2">
       <label class="field" for="s_phone"><span>Phone number</span><input id="s_phone" type="text" inputmode="tel" maxlength="24" placeholder="+977 98XXXXXXXX"></label>
-      <label class="field" for="s_whatsapp"><span>WhatsApp number with country code</span><input id="s_whatsapp" type="text" inputmode="tel" maxlength="24" placeholder="97798XXXXXXXX"></label>
+      <label class="field" for="s_whatsapp"><span>WhatsApp number</span><input id="s_whatsapp" type="text" inputmode="tel" maxlength="24" placeholder="97798XXXXXXXX"></label>
     </div>
     <div class="grid2">
       <label class="field" for="s_fb"><span>Facebook page</span><input id="s_fb" type="text" maxlength="160" placeholder="Link or page name"></label>
@@ -240,13 +241,13 @@
     <div class="grid2">
       <label class="field" for="s_tt"><span>TikTok</span><input id="s_tt" type="text" maxlength="160" placeholder="Link or @name"></label>
     </div>
-    <label class="field" for="s_about"><span>About you (shown at the bottom)</span>
+    <label class="field" for="s_about"><span>About you</span>
       <textarea id="s_about" rows="3" maxlength="400" placeholder="A sentence or two about you and the areas you work in"></textarea>
     </label>
     <p class="err" id="s_err" role="alert" hidden></p>
     <div class="row end">
       <button class="btn" type="button" data-close>Cancel</button>
-      <button class="btn primary" type="submit" id="s_save">Save and publish</button>
+      <button class="btn primary" type="submit" id="s_save">Save details</button>
     </div>
   </form>
 </dialog>
@@ -264,16 +265,16 @@
         <input id="c_name" type="text" maxlength="24" placeholder="For example: Flat rent" autocomplete="off">
       </label>
       <fieldset class="plain">
-        <legend>Is it for sale or for rent?</legend>
+        <legend>Sale or rent</legend>
         <div class="seg">
           <label><input type="radio" name="c_deal" id="c_deal_sale" value="sale" checked><span>For sale</span></label>
-          <label><input type="radio" name="c_deal" id="c_deal_rent" value="rent"><span>For rent, price per month</span></label>
+          <label><input type="radio" name="c_deal" id="c_deal_rent" value="rent"><span>For rent (per month)</span></label>
         </div>
       </fieldset>
       <p class="err" id="c_err" role="alert" hidden></p>
       <div class="row end">
         <button class="btn" type="button" data-close>Close</button>
-        <button class="btn primary" type="submit" id="c_save">Add and publish</button>
+        <button class="btn primary" type="submit" id="c_save">Add category</button>
       </div>
     </form>
   </div>
