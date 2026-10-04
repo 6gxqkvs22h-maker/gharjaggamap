@@ -28,8 +28,8 @@
     </button>
     <h1 id="siteName"></h1>
     <button class="btn small wideonly" id="barContact" type="button">Contact</button>
-    <button class="btn small pill" id="helpBtn" type="button">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="currentColor"/><path d="M10 8v8l6.5-4z" fill="var(--bg)"/></svg>How to use
+    <button class="btn small pill" id="askBtn" type="button">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.2 6.1a2 2 0 0 0 1.2 1.2L21.5 12l-6.1 2.2a2 2 0 0 0-1.2 1.2L12 21.5l-2.2-6.1a2 2 0 0 0-1.2-1.2L2.5 12l6.1-2.2a2 2 0 0 0 1.2-1.2z" fill="currentColor"/></svg><span id="askLabel">Ask</span>
     </button>
   </header>
 
@@ -196,7 +196,7 @@
   <button class="btn small" id="manageBtn" type="button">Manage listings</button>
   <button class="btn small" id="catBtn" type="button">Categories</button>
   <button class="btn small" id="siteBtn" type="button">Site settings</button>
-  <button class="btn small" id="leadsBtn" type="button">Interested</button>
+  <button class="btn small" id="leadsBtn" type="button">Customers</button>
   <p class="dbnote" id="dbNote" role="alert" hidden>The database needs its update before new listings can be saved. In Supabase open SQL Editor and run database-update.sql.</p>
 </div>
 
@@ -213,13 +213,14 @@
       <button class="btn" type="button" data-go="allH">All properties</button>
       <button class="btn" type="button" data-go="placesH">Browse by place</button>
       <button class="btn" type="button" data-go="budgetH">What can your budget buy?</button>
-      <button class="btn" type="button" data-go="chat">Ask about properties</button>
+      <button class="btn" type="button" data-go="chat" id="menuAsk">Ask about properties</button>
       <button class="btn" type="button" data-go="help">How to use</button>
     </nav>
     <nav class="social" id="socialNav" aria-label="Social media"></nav>
     <div class="acct">
       <p class="hint" id="acctText" hidden></p>
-      <button class="btn" id="googleBtn" type="button" hidden>Continue with Google</button>
+      <button class="btn" id="profileBtn" type="button" hidden>My profile</button>
+      <button class="btn gbtn" id="googleBtn" type="button" hidden><img class="gico" alt="" hidden>Continue with Google</button>
       <button class="btn" id="signOutBtn" type="button" hidden>Sign out</button>
       <button class="btn" id="loginBtn" type="button">Owner sign in</button>
     </div>
@@ -267,7 +268,7 @@
     <div class="about-box" id="intAbout"></div>
     <div class="form" id="intOut">
       <p>Continue with Google so the owner knows who to reply to. Your name and email are sent to the owner only. They are not shown on the site.</p>
-      <button class="btn primary" type="button" id="intGoogle">Continue with Google</button>
+      <button class="btn primary gbtn" type="button" id="intGoogle"><img class="gico" alt="" hidden>Continue with Google</button>
     </div>
     <div class="form" id="intIn" hidden>
       <p class="hint" id="intWho"></p>
@@ -289,13 +290,34 @@
 <dialog id="dlgLeads" aria-labelledby="leadsH">
   <div class="dlg form">
     <div class="dlg-head">
-      <h2 id="leadsH">Interested customers</h2>
+      <h2 id="leadsH">Customers and visits</h2>
       <button class="x" type="button" data-close aria-label="Close">&times;</button>
     </div>
-    <p class="hint">People who pressed “I am interested” on a property after signing in with Google. Newest first.</p>
+    <dl class="stats" id="statBox"></dl>
+    <p class="hint">A visit is one phone or computer opening the site on one day. Your own visits are not counted while you are signed in.</p>
+    <div class="chips" id="ldTabs" role="group" aria-label="Which customers"></div>
     <p class="err" id="ld_err" role="alert" hidden></p>
     <ul class="mlist" id="leadList"></ul>
   </div>
+</dialog>
+
+<dialog id="dlgProfile" aria-labelledby="profH">
+  <form class="dlg form" id="profForm" novalidate>
+    <div class="dlg-head">
+      <h2 id="profH">My profile</h2>
+      <button class="x" type="button" data-close aria-label="Close">&times;</button>
+    </div>
+    <dl class="facts" id="profFacts"></dl>
+    <label class="field" for="p_phone"><span>Your phone number</span>
+      <input id="p_phone" type="text" inputmode="tel" maxlength="24" autocomplete="tel" placeholder="98XXXXXXXX">
+      <small class="hint">Only the owner sees it, so they can call you back about a property.</small>
+    </label>
+    <p class="err" id="p_err" role="alert" hidden></p>
+    <div class="row end">
+      <button class="btn" type="button" data-close>Cancel</button>
+      <button class="btn primary" type="submit" id="p_save">Save</button>
+    </div>
+  </form>
 </dialog>
 
 <dialog id="dlgDetail" aria-label="Property details"><div class="dlg" id="detailBody"></div></dialog>

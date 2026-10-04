@@ -96,11 +96,24 @@ This part has NOT been tested against the real Google and Supabase services.
    `https://gharjaggamap.vercel.app/**` to Redirect URLs (and the same for your own domain if you add one).
 6. Reload the site. The side menu now shows **Continue with Google**.
 
-If you sign in with Google using the owner email, you get the owner tools as well.
+**The owner signs in with Google too.** The email set as owner in `supabase/make-owner.sql` is recognised
+automatically: continue with Google using that email and the owner tools appear. Once Google is switched on,
+the "Owner sign in" button is no longer shown. The password sign-in stays available as a backup at
+`https://your-site/#owner`.
+
+**Google icon on the button.** The button shows text only until you add Google's own icon file:
+download the official "G" icon from Google's sign-in branding page
+(developers.google.com/identity/branding-guidelines) and upload it to the site as `img/google.svg`.
+The buttons then show it automatically.
+
+**Customers and visits.** The **Customers** button in the owner bar shows how many visits the site had
+(today, last 7 days, all time), everyone who continued with Google (name, email, phone if they added it),
+and who pressed "I am interested". A visit is one phone or computer per day; no visitor details are stored for it.
+Customers add or change their phone number under **My profile** in the menu.
 
 ## 9. Optional: AI answers in "Ask about properties"
 
-The side menu has **Ask about properties**. Without any key it already answers by searching your listings
+The button at the top right (and **Ask about properties** in the side menu) opens the chat. Without any key it already answers by searching your listings
 by type, place, budget and bedrooms. To let AI write the answers:
 
 1. Get a free key at aistudio.google.com.
@@ -127,9 +140,9 @@ Each visitor is limited to about 20 questions in 10 minutes.
 - **Icons:** each kind of property has its own icon: on the map pins, the category buttons and wherever a listing
   has no photo. Pins that are very close together are spread in a small ring so each can be tapped; zoom in to see
   each one on its exact spot.
-- **Sign out:** it is in the side menu now (top left button).
+- **Sign out:** it is in the side menu (top left button).
 - **Hearts:** visitors tap the heart to save a property. It is kept on their own phone; no account is needed.
-- **How to use:** the button at the top opens a short guide. Paste a video link in **Site settings** and the guide
+- **How to use:** it is in the side menu and opens a short guide. Paste a video link in **Site settings** and the guide
   gets a "Watch the video" button.
 - **Map style:** the map uses MapTiler's dark street map. To use another, add `MAP_STYLE: 'streets-v2'` to `js/config.js`.
 - **Manage listings:** every listing with View, Edit, Delete and its status. **Sold**, **Rented** and **Unavailable**

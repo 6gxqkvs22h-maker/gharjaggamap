@@ -1,9 +1,13 @@
--- Run this AFTER you have created your user in Supabase > Authentication > Users.
--- Replace the email below with the email you created, then press Run.
+-- Makes one email the owner of the site. Replace the email below (twice), then press Run.
+-- The owner can then sign in with Google using that email, or with a password if you created
+-- the user in Supabase > Authentication > Users.
+
+insert into public.admin_emails (email) values ('PUT-YOUR-EMAIL-HERE')
+on conflict (email) do nothing;
 
 insert into public.admins (user_id)
-select id from auth.users where email = 'PUT-YOUR-EMAIL-HERE'
+select id from auth.users where lower(email) = lower('PUT-YOUR-EMAIL-HERE')
 on conflict (user_id) do nothing;
 
--- This should now show one row with your email:
-select u.email from public.admins a join auth.users u on u.id = a.user_id;
+-- This should show your email:
+select email from public.admin_emails;

@@ -20,6 +20,8 @@ const DISTRICT = CFG.DISTRICT || 'Kathmandu';
 // The address of the home page, so a property can have its own address: /property/<id>
 // True when a customer has just come back from Google after pressing "I am interested".
 const cameBack = /[?&]interested=1/.test(location.search);
+// True when the page is opening straight after a Google sign-in.
+const fromAuth = /access_token=|[?&#]code=/.test(location.hash + location.search);
 const BASE = location.pathname.replace(/index\.html$/, '').replace(/property\/[\w-]+\/?$/, '') || '/';
 
 /* ---------- what each kind of property asks for ----------
@@ -449,10 +451,14 @@ let customer = null;          // a visitor who continued with Google: { id, emai
 let googleOn = CFG.GOOGLE_LOGIN === true;   // found out from Supabase at start, unless set in js/config.js
 let myInterest = new Set();   // the properties this customer already told the owner about
 let leads = [];               // for the owner: everyone who pressed "I am interested"
+let people = [];              // for the owner: every customer who continued with Google
+let visits = { today: 0, week: 0, total: 0, ok: false };
+const TZ = CFG.TIMEZONE || 'Asia/Kathmandu';
+const dayKey = d => { try { return d.toLocaleDateString('en-CA', { timeZone: TZ }); } catch (e) { return d.toISOString().slice(0, 10); } };
 const byId = id => state.listings.find(l => l.id === id) || null;
 // Visitors never see a listing marked unavailable (the database does not send it to them either).
 const shown = () => owner ? state.listings : state.listings.filter(l => l.status !== 'unavailable');
-const dlgDetail = $('#dlgDetail'), dlgContact = $('#dlgContact'), dlgEdit = $('#dlgEdit'), dlgSite = $('#dlgSite'), dlgCats = $('#dlgCats'), dlgLogin = $('#dlgLogin'), dlgManage = $('#dlgManage'), dlgConfirm = $('#dlgConfirm'), dlgInterest = $('#dlgInterest'), dlgLeads = $('#dlgLeads'), dlgChat = $('#dlgChat');
+const dlgDetail = $('#dlgDetail'), dlgContact = $('#dlgContact'), dlgEdit = $('#dlgEdit'), dlgSite = $('#dlgSite'), dlgCats = $('#dlgCats'), dlgLogin = $('#dlgLogin'), dlgManage = $('#dlgManage'), dlgConfirm = $('#dlgConfirm'), dlgInterest = $('#dlgInterest'), dlgLeads = $('#dlgLeads'), dlgChat = $('#dlgChat'), dlgProfile = $('#dlgProfile');
 
 // Dialogs can sit on top of each other (Manage listings, then a property, then Contact). This keeps their order.
 const stack = [];
@@ -1167,7 +1173,7 @@ const dlgMenu = $('#dlgMenu'), dlgHelp = $('#dlgHelp');
 $('#talkBtn').addEventListener('click', () => { dlgMenu.close(); openContact(null); });
 $('#barContact').addEventListener('click', () => openContact(null));
 $('#menuBtn').addEventListener('click', () => show(dlgMenu));
-$('#helpBtn').addEventListener('click', () => show(dlgHelp));
+$('#askBtn').addEventListener('click', () => openChat());
 dlgMenu.addEventListener('click', e => {
   const b = e.target.closest('[data-go]'); if (!b) return;
   const go = b.dataset.go;
@@ -1247,8 +1253,6 @@ $('#confirmYes').addEventListener('click', async () => {
 function setOwner(on) {
   owner = !!on;
   $('#ownerBar').hidden = !owner;
-  $('#loginLink').hidden = owner;
-  $('#loginBtn').hidden = owner;
   document.body.classList.toggle('has-owner', owner);
   renderAccount();
   renderList();
@@ -1260,8 +1264,12 @@ function renderAccount() {
   t.textContent = owner ? 'Signed in as the owner.' : customer ? 'Signed in as ' + customer.name + ' (' + customer.email + ').' : '';
   t.hidden = !inNow;
   $('#googleBtn').hidden = inNow || !googleOn;
+  $('#profileBtn').hidden = !customer;
   $('#signOutBtn').hidden = !inNow;
-  $('#leadsBtn').textContent = 'Interested' + (leads.length ? ' (' + leads.length + ')' : '');
+  // With Google switched on, the owner signs in with Google like everyone else and is recognised by email.
+  // The password sign-in stays reachable at the address /#owner in case Google is ever unavailable.
+  $('#loginBtn').hidden = $('#loginLink').hidden = inNow || googleOn;
+  $('#leadsBtn').textContent = 'Customers' + (leads.length ? ' (' + leads.length + ')' : '');
 }
 async function checkOwner() {
   try {
@@ -1274,10 +1282,13 @@ async function checkOwner() {
       customer = null;
       // The owner also gets the listings hidden from visitors, and a warning if the database is not updated yet.
       try { await loadAll(); } catch (e) {}
-      Promise.all([sb.from('listings').select('deal_type,details,featured').limit(1), loadLeads()]).then(p => { $('#dbNote').hidden = !(p[0].error || p[1]); }, () => {});
+      Promise.all([sb.from('listings').select('deal_type,details,featured').limit(1), loadLeads(), loadPeople()]).then(p => { $('#dbNote').hidden = !(p[0].error || p[1] || p[2]); }, () => {});
     } else {
       const m = u.user_metadata || {};
-      customer = { id: u.id, email: String(u.email || ''), name: String(m.full_name || m.name || String(u.email || '').split('@')[0] || 'Customer').slice(0, 120) };
+      customer = { id: u.id, email: String(u.email || ''), name: String(m.full_name || m.name || String(u.email || '').split('@')[0] || 'Customer').slice(0, 120), phone: '' };
+      // Keep the customer's profile up to date (the phone number they added earlier is left as it is), then read it back.
+      sb.from('profiles').upsert({ user_id: u.id, email: customer.email, name: customer.name, last_seen: new Date().toISOString() }, { onConflict: 'user_id' }).select('phone')
+        .then(q => { if (!q.error && q.data && q.data[0] && customer) customer.phone = String(q.data[0].phone || ''); }, () => {});
       sb.from('interests').select('listing_id').eq('user_id', u.id).then(q => {
         if (!q.error && Array.isArray(q.data)) { myInterest = new Set(q.data.map(x => x.listing_id).filter(Boolean)); if (dlgDetail.open && byId($('#detailBody').dataset.id)) openDetail($('#detailBody').dataset.id); }
       }, () => {});
@@ -1299,6 +1310,8 @@ async function googleSignIn(backTo) {
     if (r.error) throw r.error;
   } catch (e) { console.error(e); toast('Google sign-in could not start. Try again in a moment.'); }
 }
+// The Google icon on the buttons is shown only when the file img/google.svg exists (see SETUP.md).
+document.querySelectorAll('img.gico').forEach(i => { i.addEventListener('load', () => { i.hidden = false; }); i.src = BASE + 'img/google.svg'; });
 $('#googleBtn').addEventListener('click', () => googleSignIn());
 let intId = null;
 function openInterest(id) {
@@ -1310,6 +1323,7 @@ function openInterest(id) {
   if (customer) {
     $('#intWho').textContent = 'Sending as ' + customer.name + ' (' + customer.email + '). The owner will reply to you directly.';
     $('#i_err').hidden = true;
+    if (!$('#i_phone').value) $('#i_phone').value = customer.phone || '';
     $('#i_save').textContent = myInterest.has(id) ? 'Send again' : 'Send to the owner';
   }
   show(dlgInterest);
@@ -1327,6 +1341,8 @@ $('#intForm').addEventListener('submit', async e => {
       phone: $('#i_phone').value.trim().slice(0, 30), message: $('#i_msg').value.trim().slice(0, 500)
     }, { onConflict: 'user_id,listing_id' }).select('id');
     if (r.error) throw r.error;
+    const ph = $('#i_phone').value.trim().slice(0, 30);
+    if (ph && ph !== customer.phone) { customer.phone = ph; sb.from('profiles').update({ phone: ph }).eq('user_id', customer.id).then(() => {}, () => {}); }
     myInterest.add(l.id);
     dlgInterest.close();
     if (dlgDetail.open && $('#detailBody').dataset.id === l.id) openDetail(l.id);
@@ -1347,22 +1363,50 @@ async function loadLeads() {
   renderAccount();
   return false;
 }
+// Signed-in customers and the visit count. Returns true when the tables are missing (database update not run yet).
+async function loadPeople() {
+  const r = await Promise.all([sb.from('profiles').select('*').order('last_seen', { ascending: false }), sb.from('visits').select('*')]);
+  people = !r[0].error && Array.isArray(r[0].data) ? r[0].data : [];
+  visits = { today: 0, week: 0, total: 0, ok: !r[1].error };
+  if (!r[1].error && Array.isArray(r[1].data)) {
+    const today = dayKey(new Date()), weekAgo = dayKey(new Date(Date.now() - 6 * 864e5));
+    r[1].data.forEach(v => { const n = Number(v.count) || 0, d = String(v.day); visits.total += n; if (d === today) visits.today += n; if (d >= weekAgo && d <= today) visits.week += n; });
+  }
+  return !!(r[0].error || r[1].error);
+}
+let ldTab = 'interest';
+const shortDate = v => v ? new Date(v).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+const mailHref = (email, subject) => /^[^\s@<>"']+@[^\s@<>"']+$/.test(email || '') ? 'mailto:' + encodeURIComponent(email).replace(/%40/g, '@') + (subject ? '?subject=' + encodeURIComponent(subject) : '') : '';
+const telOf = v => { const t = String(v || '').replace(/[^\d+]/g, ''); return t.length >= 7 ? t : ''; };
 function renderLeads() {
+  $('#statBox').innerHTML = [['Visits today', visits.ok ? groupIN(visits.today) : '–'], ['Last 7 days', visits.ok ? groupIN(visits.week) : '–'], ['All visits', visits.ok ? groupIN(visits.total) : '–'], ['Signed-in customers', groupIN(people.length)]]
+    .map(x => '<div><dt>' + x[0] + '</dt><dd>' + x[1] + '</dd></div>').join('');
+  $('#ldTabs').innerHTML = [['interest', 'Interested', leads.length], ['people', 'Signed in', people.length]].map(x =>
+    '<button class="chip" type="button" data-ld="' + x[0] + '" aria-pressed="' + (ldTab === x[0]) + '">' + x[1] + '<b>' + x[2] + '</b></button>').join('');
+  if (ldTab === 'people') {
+    $('#leadList').innerHTML = people.length ? people.map(d => {
+      const n = leads.filter(x => x.user_id === d.user_id).length, mail = mailHref(d.email), tel = telOf(d.phone);
+      return '<li class="mrow lead"><div class="mbody"><strong>' + esc(d.name || d.email || 'Customer') + '</strong>' +
+        '<span>' + esc([d.email, d.phone || 'No phone number yet'].filter(Boolean).join(' · ')) + '</span>' +
+        '<span class="hint">' + esc('First signed in ' + shortDate(d.created_at) + ' · last seen ' + shortDate(d.last_seen) + (n ? ' · interested in ' + n + (n === 1 ? ' property' : ' properties') : '')) + '</span></div>' +
+        '<div class="mact">' + (mail ? '<a class="btn small primary" href="' + esc(mail) + '">Email</a>' : '') + (tel ? '<a class="btn small" href="tel:' + esc(tel) + '">Call</a>' : '') + '</div></li>';
+    }).join('') : '<li class="empty">No customer has continued with Google yet.</li>';
+    return;
+  }
   $('#leadList').innerHTML = leads.length ? leads.map(d => {
     const l = d.listing_id ? byId(d.listing_id) : null, title = (l && l.title) || d.listing_title || 'A property that was deleted';
-    const when = d.created_at ? new Date(d.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-    const tel = String(d.phone || '').replace(/[^\d+]/g, '');
-    const mail = /^[^\s@<>"']+@[^\s@<>"']+$/.test(d.email || '') ? 'mailto:' + encodeURIComponent(d.email).replace(/%40/g, '@') + '?subject=' + encodeURIComponent(title) : '';
+    const tel = telOf(d.phone), mail = mailHref(d.email, title);
     return '<li class="mrow lead" data-lead="' + esc(d.id) + '"><div class="mbody"><strong>' + esc(d.name || d.email || 'Customer') + '</strong>' +
       '<span>' + esc(title) + '</span>' + (d.message ? '<span class="lmsg">' + esc(d.message) + '</span>' : '') +
-      '<span class="hint">' + esc([d.email, d.phone, when].filter(Boolean).join(' · ')) + '</span></div>' +
+      '<span class="hint">' + esc([d.email, d.phone, shortDate(d.created_at)].filter(Boolean).join(' · ')) + '</span></div>' +
       '<div class="mact">' + (mail ? '<a class="btn small primary" href="' + esc(mail) + '">Email</a>' : '') +
-      (tel.length >= 7 ? '<a class="btn small" href="tel:' + esc(tel) + '">Call</a>' : '') +
+      (tel ? '<a class="btn small" href="tel:' + esc(tel) + '">Call</a>' : '') +
       (l ? '<button class="btn small" type="button" data-view="' + esc(l.id) + '">View property</button>' : '') +
       '<button class="btn small danger" type="button" data-rmlead>Remove</button></div></li>';
   }).join('') : '<li class="empty">Nobody has pressed “I am interested” yet. Customers see that button on a property once Google sign-in is switched on in Supabase.</li>';
 }
-$('#leadsBtn').addEventListener('click', async () => { $('#ld_err').hidden = true; renderLeads(); show(dlgLeads); await loadLeads(); renderLeads(); });
+$('#leadsBtn').addEventListener('click', async () => { $('#ld_err').hidden = true; renderLeads(); show(dlgLeads); await Promise.all([loadLeads(), loadPeople()]); renderLeads(); });
+$('#ldTabs').addEventListener('click', e => { const b = e.target.closest('[data-ld]'); if (!b) return; ldTab = b.dataset.ld; renderLeads(); });
 $('#leadList').addEventListener('click', async e => {
   const v = e.target.closest('[data-view]');
   if (v) { openDetail(v.dataset.view); return; }
@@ -1376,11 +1420,51 @@ $('#leadList').addEventListener('click', async e => {
   renderLeads(); renderAccount();
 });
 
+/* ---------- customer: my profile ---------- */
+$('#profileBtn').addEventListener('click', () => {
+  if (!customer) return;
+  dlgMenu.close();
+  $('#profFacts').innerHTML = '<div><dt>Name</dt><dd>' + esc(customer.name) + '</dd></div><div><dt>Email</dt><dd>' + esc(customer.email) + '</dd></div>';
+  $('#p_phone').value = customer.phone || '';
+  $('#p_err').hidden = true;
+  show(dlgProfile);
+});
+$('#profForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const err = $('#p_err'), btn = $('#p_save'), ph = $('#p_phone').value.trim().slice(0, 30);
+  if (!customer || btn.disabled) return;
+  if (ph && !telOf(ph)) { err.textContent = 'That phone number looks too short. Type it with all its digits, for example 98XXXXXXXX.'; err.hidden = false; return; }
+  err.hidden = true; btn.disabled = true;
+  try {
+    const r = await sb.from('profiles').upsert({ user_id: customer.id, email: customer.email, name: customer.name, phone: ph, last_seen: new Date().toISOString() }, { onConflict: 'user_id' }).select('phone');
+    if (r.error) throw r.error;
+    customer.phone = ph;
+    dlgProfile.close();
+    toast(ph ? 'Phone number saved.' : 'Phone number removed.');
+  } catch (e2) { console.error(e2); err.textContent = 'Could not save it just now. Try again in a moment.'; err.hidden = false; }
+  finally { btn.disabled = false; }
+});
+
+/* ---------- visit count ---------- */
+// One count per phone or computer per day. Nothing about the visitor is stored, only the day's total.
+function countVisit() {
+  if (owner) return;
+  const today = dayKey(new Date());
+  try { if (localStorage.getItem('gjm_visit') === today) return; localStorage.setItem('gjm_visit', today); } catch (e) { return; }
+  sb.rpc('log_visit').then(() => {}, () => {});
+}
+
 /* ---------- ask about properties (chat) ----------
    Works without any key: it searches the listings by type, place, budget and bedrooms.
    When GEMINI_API_KEY is added in Vercel, /api/chat answers instead and this search stays as the backup. */
 const chat = { ai: false, msgs: [], busy: false };
-fetch('/api/chat').then(r => r.ok ? r.json() : null).then(j => { chat.ai = !!(j && j.enabled); }).catch(() => {});
+function chatLabels() {
+  $('#askLabel').textContent = chat.ai ? 'Ask AI' : 'Ask';
+  $('#askBtn').setAttribute('aria-label', chat.ai ? 'Ask AI about properties' : 'Ask about properties');
+  $('#chatH').textContent = $('#menuAsk').textContent = chat.ai ? 'Ask AI about properties' : 'Ask about properties';
+}
+chatLabels();
+fetch('/api/chat').then(r => r.ok ? r.json() : null).then(j => { chat.ai = !!(j && j.enabled); chatLabels(); }).catch(() => {});
 const KIND_WORDS = [['flat', /flat|apartment|bhk|फ्ल्याट/], ['room', /room|kotha|कोठा/], ['shutter', /shutter|sutter|सटर|shop/], ['business', /business|office|commercial|hotel|restaurant|warehouse|व्यापार/], ['house', /house|ghar|घर|bungalow/], ['land', /land|jagga|जग्गा|plot|ropani|anna|aana/]];
 function findListings(q) {
   const s = ' ' + String(q).toLowerCase() + ' ';
@@ -1487,7 +1571,7 @@ $('#loginForm').addEventListener('submit', async e => {
 $('#signOutBtn').addEventListener('click', async () => {
   try { await sb.auth.signOut(); } catch (e) {}
   state.listings = state.listings.filter(l => l.status !== 'unavailable');
-  customer = null; myInterest = new Set(); leads = [];
+  customer = null; myInterest = new Set(); leads = []; people = [];
   if (dlgMenu.open) dlgMenu.close();
   setOwner(false); toast('Signed out.');
 });
@@ -1948,13 +2032,13 @@ $('#siteForm').addEventListener('submit', async e => {
 });
 
 /* ---------- dialogs: close buttons and backdrop ---------- */
-[dlgDetail, dlgContact, dlgEdit, dlgSite, dlgCats, dlgLogin, dlgManage, dlgMenu, dlgHelp, dlgInterest, dlgLeads, dlgChat].forEach(d => {
+[dlgDetail, dlgContact, dlgEdit, dlgSite, dlgCats, dlgLogin, dlgManage, dlgMenu, dlgHelp, dlgInterest, dlgLeads, dlgChat, dlgProfile].forEach(d => {
   d.addEventListener('click', e => {
     if (e.target.closest('[data-close]')) { d.close(); return; }
     if (e.target === d && (d === dlgDetail || d === dlgContact || d === dlgMenu || d === dlgHelp || d === dlgChat)) d.close();
   });
 });
-[dlgDetail, dlgContact, dlgEdit, dlgSite, dlgCats, dlgLogin, dlgManage, dlgConfirm, dlgMenu, dlgHelp, dlgInterest, dlgLeads, dlgChat].forEach(d => {
+[dlgDetail, dlgContact, dlgEdit, dlgSite, dlgCats, dlgLogin, dlgManage, dlgConfirm, dlgMenu, dlgHelp, dlgInterest, dlgLeads, dlgChat, dlgProfile].forEach(d => {
   d.addEventListener('close', () => {
     const i = stack.indexOf(d); if (i >= 0) stack.splice(i, 1);
     const t = $('#toast'); if (t.parentNode === d) (stack[stack.length - 1] || document.body).appendChild(t);
@@ -1985,8 +2069,13 @@ renderHeader(); renderLegend();
   if (/property\/[\w-]+\/?$/.test(location.pathname) || /^#p-/.test(location.hash || '')) {
     const m = /property\/([\w-]+)\/?$/.exec(location.pathname) || /^#p-([\w-]+)$/.exec(location.hash);
     const after = () => { if (cameBack && customer && dlgDetail.open) openInterest($('#detailBody').dataset.id); };
-    if (m && byId(m[1])) { openFromUrl(); checkOwner().then(after); } else checkOwner().then(openFromUrl).then(after);
-  } else checkOwner();
+    if (m && byId(m[1])) { openFromUrl(); checkOwner().then(after).then(countVisit); } else checkOwner().then(openFromUrl).then(after).then(countVisit);
+  } else checkOwner().then(() => {
+    countVisit();
+    if (location.hash === '#owner' && !owner) openLogin();
+    if (fromAuth && owner) toast('Signed in as the owner. Owner tools are at the bottom.');
+    else if (fromAuth && customer) toast('Signed in as ' + customer.name + '.');
+  });
   // GPS when the map opens: show the blue dot, keep the whole area in view.
   locate(() => {}, true);
   fetch('/api/explain').then(r => r.ok ? r.json() : null).then(j => { aiOn = !!(j && j.enabled); if (aiOn && budget) $('#aiBox').hidden = false; }).catch(() => {});

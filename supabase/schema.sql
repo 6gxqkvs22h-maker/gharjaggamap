@@ -108,6 +108,14 @@ alter table public.listings
 
 -- 2. Who is the owner -----------------------------------------------------
 
+-- Update 5: the owner can also be recognised by email, so signing in with Google works for the owner too.
+-- Only an email that the sign-in service has confirmed counts. Nobody can read this table through the site.
+create table if not exists public.admin_emails (
+  email text primary key
+);
+alter table public.admin_emails enable row level security;
+revoke all on public.admin_emails from anon, authenticated;
+
 create or replace function public.is_admin()
 returns boolean
 language sql
@@ -115,7 +123,11 @@ stable
 security definer
 set search_path = public
 as $$
-  select exists (select 1 from public.admins where user_id = auth.uid());
+  select exists (select 1 from public.admins where user_id = auth.uid())
+      or exists (
+        select 1 from auth.users u join public.admin_emails e on lower(u.email) = lower(e.email)
+        where u.id = auth.uid() and u.email_confirmed_at is not null
+      );
 $$;
 
 grant execute on function public.is_admin() to anon, authenticated;
@@ -220,6 +232,67 @@ create policy "interests remove own or owner" on public.interests
 
 revoke all on public.interests from anon;
 grant select, insert, update, delete on public.interests to authenticated;
+
+-- 4c. Update 5: customer profiles and a daily visit count ---------------------------------------
+-- A profile is made when a customer continues with Google. They can add their phone number.
+-- A customer sees only their own profile. Only the owner sees all of them.
+
+create table if not exists public.profiles (
+  user_id uuid primary key default auth.uid() references auth.users (id) on delete cascade,
+  email text not null default '' check (char_length(email) <= 200),
+  name text not null default '' check (char_length(name) <= 120),
+  phone text not null default '' check (char_length(phone) <= 30),
+  created_at timestamptz not null default now(),
+  last_seen timestamptz not null default now()
+);
+alter table public.profiles enable row level security;
+
+drop policy if exists "profiles read own or owner" on public.profiles;
+create policy "profiles read own or owner" on public.profiles
+  for select to authenticated using (user_id = auth.uid() or public.is_admin());
+
+drop policy if exists "profiles add own" on public.profiles;
+create policy "profiles add own" on public.profiles
+  for insert to authenticated
+  with check (user_id = auth.uid() and email = coalesce(auth.jwt() ->> 'email', ''));
+
+drop policy if exists "profiles change own" on public.profiles;
+create policy "profiles change own" on public.profiles
+  for update to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid() and email = coalesce(auth.jwt() ->> 'email', ''));
+
+drop policy if exists "profiles remove own or owner" on public.profiles;
+create policy "profiles remove own or owner" on public.profiles
+  for delete to authenticated using (user_id = auth.uid() or public.is_admin());
+
+revoke all on public.profiles from anon;
+grant select, insert, update, delete on public.profiles to authenticated;
+
+-- Visits: one number per day. No names, no addresses, nothing about the visitor is stored.
+create table if not exists public.visits (
+  day date primary key,
+  count integer not null default 0
+);
+alter table public.visits enable row level security;
+
+drop policy if exists "visits owner read" on public.visits;
+create policy "visits owner read" on public.visits
+  for select to authenticated using (public.is_admin());
+
+revoke all on public.visits from anon, authenticated;
+grant select on public.visits to authenticated;
+
+create or replace function public.log_visit()
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  insert into public.visits (day, count) values ((now() at time zone 'Asia/Kathmandu')::date, 1)
+  on conflict (day) do update set count = public.visits.count + 1;
+$$;
+grant execute on function public.log_visit() to anon, authenticated;
 
 -- 5. Photo storage --------------------------------------------------------
 

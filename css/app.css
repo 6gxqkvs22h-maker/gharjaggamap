@@ -798,3 +798,21 @@ body.has-owner .page{padding-bottom:120px}
   .typegrid span svg{width:36px;height:36px}
 }
 .mact .btn.primary{background:var(--accent)}
+
+/* ============================================================================
+   Update 5: Ask AI in the top bar, Google button, customers and visits, profile.
+   ============================================================================ */
+#askBtn{border-color:var(--accent);color:var(--accent)}
+#askBtn svg{width:18px;height:18px}
+.gbtn{gap:10px}
+.gico{width:20px;height:20px;flex:none;display:block}
+.btn.primary.gbtn .gico{background:#fff;border-radius:50%;padding:2px;width:24px;height:24px}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0}
+.stats div{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:12px 12px 10px;min-width:0}
+.stats dt{font-size:13px;color:var(--muted);line-height:1.3}
+.stats dd{margin:4px 0 0;font:700 26px/1.1 var(--display);font-variant-numeric:tabular-nums}
+@media (max-width:640px){
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #dlgProfile{width:calc(100vw - 16px);max-width:calc(100vw - 16px);height:fit-content;max-height:calc(100dvh - 24px);margin:auto;border:1px solid var(--line);border-radius:14px}
+  #dlgProfile .dlg-head{padding-top:12px}
+}
