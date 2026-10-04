@@ -419,7 +419,7 @@ body.has-owner .page{padding-bottom:120px}
 /* phones: forms and details become full-screen panels */
 @media (max-width:640px){
   dialog{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0;border:0;border-radius:0}
-  #dlgContact,#dlgLogin{width:calc(100vw - 16px);max-width:calc(100vw - 16px);height:auto;max-height:calc(100dvh - 24px);margin:auto;border:1px solid var(--line);border-radius:14px}
+  #dlgContact,#dlgLogin{width:calc(100vw - 16px);max-width:calc(100vw - 16px);height:fit-content;max-height:calc(100dvh - 24px);margin:auto;border:1px solid var(--line);border-radius:14px}
   .dlg-head{padding-top:calc(12px + env(safe-area-inset-top, 0px))}
   #dlgContact .dlg-head,#dlgLogin .dlg-head{padding-top:12px}
   .dlg-head h2{font-size:22px}
@@ -462,3 +462,106 @@ body.has-owner .page{padding-bottom:120px}
 .gal-main.empty{aspect-ratio:auto;height:128px}
 @media (max-width:480px){ .card-price{font-size:21.5px} }
 @media (max-width:359px){ .card-price{font-size:20px} }
+
+/* ============================================================================
+   Update 2: one form per kind of property, category-specific cards,
+   more filters, Manage listings, photo order, property page with its own map.
+   ============================================================================ */
+
+/* step 1 and 2 of the form: what is it, sale or rent */
+.typegrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.dealgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.typegrid label,.dealgrid label{display:block}
+.typegrid span,.dealgrid span{width:100%;justify-content:center;text-align:center;min-height:56px;border-radius:10px;font-size:16.5px;padding:12px 8px;overflow-wrap:anywhere}
+.dealgrid label:only-child{grid-column:1 / -1}
+.sect{font:700 19px/1.2 var(--display);margin:8px 0 -4px;padding-top:16px;border-top:1px solid var(--line);letter-spacing:-.01em}
+.field>small.hint{font-size:14px;line-height:1.5;color:var(--muted)}
+.pair.one{grid-template-columns:minmax(0,1fr)}
+.unitbox{position:relative;display:block}
+.unitbox input{padding-right:46px}
+.unitbox em{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-style:normal;font-weight:600;color:var(--muted);pointer-events:none}
+.ticks{display:flex;flex-wrap:wrap;gap:8px}
+.tick{position:relative;cursor:pointer}
+.tick input{position:absolute;opacity:0;pointer-events:none}
+.tick span{display:inline-flex;align-items:center;gap:8px;min-height:48px;padding:10px 16px 10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font:600 15.5px/1.2 var(--body)}
+.tick span::before{content:"";flex:none;width:20px;height:20px;border-radius:5px;border:2px solid var(--muted);background:var(--surface-2)}
+.tick input:checked+span{border-color:var(--ink);background:var(--surface-2)}
+.tick input:checked+span::before{border-color:var(--accent);background:var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M4.5 10.5l3.5 3.5 7.5-8' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/16px no-repeat}
+.tick input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+
+/* photos in the form: cover first, arrows to reorder, cross to remove */
+.ph{width:138px;height:auto;display:grid;background:var(--surface-2)}
+.ph img{height:98px}
+.ph .cover{position:absolute;left:6px;top:6px;font:600 11.5px/1 var(--body);letter-spacing:.05em;text-transform:uppercase;padding:4px 7px;border-radius:4px;background:var(--accent);color:var(--accent-ink)}
+.ph-bar{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line)}
+.ph .ph-bar button{position:static;width:auto;height:44px;border-radius:0;border:0;border-left:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:19px}
+.ph .ph-bar button:first-child{border-left:0}
+.ph .ph-bar button[disabled]{opacity:.3;cursor:default}
+
+/* filters */
+.frow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;flex:1 1 100%}
+.frow .inline{flex:1 1 150px;min-width:0}
+.frow .inline select{width:100%}
+.more{flex:1 1 100%;display:grid;gap:16px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px clamp(14px,2.4vw,22px)}
+#moreBtn[aria-expanded="true"]{border-color:var(--ink)}
+
+/* cards: short facts as small tags, photo count on the picture */
+.cfacts{display:flex;flex-wrap:wrap;gap:6px;margin-block:3px 2px}
+.cfacts span{font-size:14px;font-weight:500;line-height:1.2;padding:5px 9px;border-radius:6px;background:var(--surface-2);border:1px solid var(--line)}
+.card-place{color:var(--muted)}
+.thumb{position:relative}
+.pcount{position:absolute;left:5px;bottom:5px;font:500 11.5px/1 var(--mono);padding:4px 6px;border-radius:4px;background:rgba(0,0,0,.62);color:#fff}
+
+/* property page */
+.where{font-size:17px;font-weight:500;margin-top:6px;overflow-wrap:anywhere}
+.postbtn{width:100%;border-color:var(--ink)}
+.postbtn svg{width:20px;height:20px;flex:none}
+.feats{display:grid;gap:8px}
+.feats-h{font-size:12.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.feats .cfacts span{font-size:15px;padding:7px 11px}
+.dmap{height:240px;border-radius:8px}
+.detail-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+.owner-row .inline select,.mact .inline select{width:auto;max-width:100%;min-height:44px;font-size:14.5px;padding:8px 12px;background:var(--surface)}
+
+/* manage listings */
+.mlist{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.mrow{display:grid;grid-template-columns:96px minmax(0,1fr);gap:10px 14px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.mrow .thumb{width:96px}
+.mbody{display:grid;gap:4px;min-width:0;align-content:start}
+.mbody strong{font-size:16.5px;line-height:1.3;overflow-wrap:anywhere}
+.mprice{font:700 18px/1.2 var(--display);color:var(--accent)}
+.mact{grid-column:1 / -1;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.mact .btn{background:var(--surface)}
+.mact .btn.danger{margin-left:auto}
+.btn.danger.solid{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+
+/* owner bar note */
+.dbnote{flex:1 1 100%;text-align:center;font-size:14px;font-weight:600;color:var(--bg);background:var(--accent);color:var(--accent-ink);padding:8px 12px;border-radius:8px}
+
+@media (max-width:640px){
+  #dlgConfirm{width:calc(100vw - 16px);max-width:calc(100vw - 16px);height:fit-content;max-height:calc(100dvh - 24px);margin:auto;border:1px solid var(--line);border-radius:14px}
+  #dlgConfirm .dlg-head{padding-top:12px}
+  .ticks{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tick span{width:100%}
+  .photos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ph{width:auto}
+  .ph img{height:auto;aspect-ratio:4/3}
+  .dmap{height:220px}
+  .mact .btn{flex:1 1 auto}
+  .mact .inline{flex:1 1 150px}
+  .mact .inline select{width:100%}
+  .mact .btn.danger{margin-left:0}
+  .frow #moreBtn{flex:1 1 100%}
+}
+@media (max-width:359px){
+  .typegrid{gap:8px}
+  .typegrid span{font-size:15px;padding-inline:4px}
+  .tick span{padding-inline:8px 10px;font-size:14.5px}
+  .mrow{grid-template-columns:76px minmax(0,1fr)}
+  .mrow .thumb{width:76px}
+}
+
+/* the per-category questions sit two to a row, also on a phone, so the form stays short */
+#f_dyn .grid2,.more .grid2{grid-template-columns:repeat(auto-fit,minmax(150px,1fr));align-items:end}
+#f_dyn .field.wide{grid-column:1 / -1}
+.toast{left:16px;right:16px;margin-inline:auto;width:fit-content;transform:none;text-align:center}

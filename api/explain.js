@@ -37,7 +37,7 @@ module.exports = async (req, res) => {
     'Write under 130 words in very simple words and short sentences that a first-time buyer understands. No jargon, no markdown, no bullet symbols. ' +
     'Say which one to three listings fit best and why, how much money is left over, and one thing to check before buying, such as road access or ownership papers. ' +
     'If nothing fits, say so kindly and name the cheapest option. Do not invent listings, prices, taxes or legal facts. ' +
-    'End by telling them to talk to the owner for details. If the visitor wrote in Nepali, answer in Nepali.';
+    'End by telling them to contact the owner for details. If the visitor wrote in Nepali, answer in Nepali.';
 
   const model = process.env.GEMINI_MODEL || 'gemini-flash-latest';
   try {

@@ -14,29 +14,198 @@ if (!window.L) { fatal('The map could not be loaded. Check your connection and r
 if (!window.supabase || !CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) { fatal('The site could not reach its database. Check your connection and reload the page.'); return; }
 const sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
 
+// The site works in one district for now. Every listing is saved with it and nobody picks it.
+// To open another district later, set DISTRICT and MAP_AREA in js/config.js.
+const DISTRICT = CFG.DISTRICT || 'Kathmandu';
+// The address of the home page, so a property can have its own address: /property/<id>
+const BASE = location.pathname.replace(/index\.html$/, '').replace(/property\/[\w-]+\/?$/, '') || '/';
+
+/* ---------- what each kind of property asks for ----------
+   A category uses one of six forms. Each form lists the size units it allows, whether it can be
+   sold, rented or both, and the questions it asks. Nothing else is shown for that category. */
+const FACING = ['East', 'West', 'North', 'South', 'North-East', 'North-West', 'South-East', 'South-West'];
+const ROADS = ['Blacktopped', 'Concrete', 'Gravel', 'Dirt', 'Highway', 'Other'];
+const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+const floorText = n => n < 0 ? 'Basement' : n === 0 ? 'Ground floor' : ordinal(n) + ' floor';
+const FLOORS = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map(n => [String(n), floorText(n)]);
+
+// t: num (decimal), int (whole number), sel (pick one), bool (tick), text.
+// col: the fact has its own database column. The others are kept together in "details".
+const FIELDS = {
+  road_width: { label: 'Road width', t: 'num', unit: 'ft', col: 1, ph: '20', max: 500 },
+  road_type: { label: 'Road type', t: 'sel', col: 1, opts: ROADS },
+  facing: { label: 'Facing', t: 'sel', col: 1, opts: FACING },
+  land_shape: { label: 'Land shape', t: 'sel', col: 1, opts: ['Rectangular', 'Square', 'Irregular', 'Other'] },
+  land_surface: { label: 'Land surface', t: 'sel', col: 1, opts: ['Flat', 'Slightly sloped', 'Sloped'] },
+  frontage: { label: 'Frontage', t: 'num', unit: 'ft', col: 1, ph: '30', max: 5000 },
+  road_sides: { label: 'Number of road sides', t: 'sel', col: 1, int: 1, opts: ['1', '2', '3', '4'] },
+  bedrooms: { label: 'Bedrooms', t: 'int', col: 1, max: 99 },
+  bathrooms: { label: 'Bathrooms', t: 'int', col: 1, max: 99 },
+  floors: { label: 'Floors', t: 'num', col: 1, ph: '2.5', max: 99 },
+  parking: { label: 'Parking', t: 'sel', col: 1, opts: ['None', 'Bike', 'Car', 'Both'] },
+  furnished: { label: 'Furnishing', t: 'sel', col: 1, opts: ['Furnished', 'Semi-furnished', 'Unfurnished'] },
+  water: { label: 'Water', t: 'bool', col: 1 },
+  electricity: { label: 'Electricity', t: 'bool', col: 1 },
+  internet: { label: 'Internet / Wi-Fi', t: 'bool', col: 1 },
+  lift: { label: 'Lift', t: 'bool', col: 1 },
+  balcony: { label: 'Balcony', t: 'bool', col: 1 },
+  suitable_for: { label: 'Suitable for', t: 'sel', col: 1, opts: [] },
+  built_year: { label: 'Built year', t: 'int', col: 1, ph: '2078 or 2021', min: 1900, max: 2100, year: 1 },
+  kitta_no: { label: 'Kitta number', t: 'text', opt: 1, max: 40 },
+  landmark: { label: 'Nearby landmark', t: 'text', ph: 'For example: 200 m from Ring Road', max: 80 },
+  drainage: { label: 'Drainage', t: 'bool' },
+  kitchens: { label: 'Kitchens', t: 'int', max: 99 },
+  living_rooms: { label: 'Living rooms', t: 'int', max: 99 },
+  dining: { label: 'Dining room', t: 'bool' },
+  terrace: { label: 'Terrace', t: 'bool' },
+  solar: { label: 'Solar', t: 'bool' },
+  garden: { label: 'Garden', t: 'bool' },
+  compound: { label: 'Compound', t: 'bool' },
+  quake: { label: 'Earthquake resistant', t: 'bool' },
+  rooms: { label: 'Rooms', t: 'int', max: 999 },
+  current_use: { label: 'Current use', t: 'text', ph: 'For example: running restaurant', max: 80 },
+  floor: { label: 'Floor', t: 'sel', int: 1, opts: FLOORS },
+  bathroom: { label: 'Bathroom', t: 'bool' },
+  bathroom_type: { label: 'Bathroom', t: 'sel', opts: ['Attached', 'Shared'] },
+  kitchen: { label: 'Kitchen', t: 'bool' },
+  living_room: { label: 'Living room', t: 'bool' },
+  bed: { label: 'Bed included', t: 'bool' },
+  security: { label: 'Security', t: 'bool' },
+  pets: { label: 'Pet friendly', t: 'bool' }
+};
+const LAND_UNITS = ['ropani', 'aana', 'paisa', 'daam', 'bigha', 'kattha', 'dhur', 'sqft', 'sqm'];
+const PLOT_UNITS = ['ropani', 'aana', 'paisa', 'daam', 'sqft'];
+const ROOM_UNITS = ['sqft', 'sqm'];
+const KINDS = {
+  land: {
+    deals: ['sale'], units: LAND_UNITS, unit: 'aana', size: 'Land size', sizePh: '4', perUnit: true, titlePh: '4 Anna land near Ring Road',
+    groups: [['Road', ['road_width', 'road_type']],
+      ['Land details', ['facing', 'land_shape', 'land_surface', 'frontage', 'road_sides']],
+      ['Utilities', ['water', 'electricity', 'drainage']],
+      ['Other', ['kitta_no', 'suitable_for', 'landmark']]],
+    suit: ['Residential', 'Commercial', 'Both'], card: ['area', 'rate', 'road', 'facing']
+  },
+  house: {
+    deals: ['sale', 'rent'], units: PLOT_UNITS, unit: 'aana', size: 'Land area', sizePh: '4', built: true, titlePh: '5 bedroom house in Sanepa',
+    groups: [['House details', ['bedrooms', 'bathrooms', 'kitchens', 'living_rooms', 'floors', 'parking', 'furnished', 'dining', 'balcony', 'terrace']],
+      ['Road', ['road_width', 'road_type', 'facing']],
+      ['Other', ['built_year', 'landmark', 'water', 'electricity', 'solar', 'internet', 'garden', 'compound', 'quake']]],
+    opts: { road_type: ['Blacktopped', 'Concrete', 'Gravel', 'Other'] }, card: ['bedrooms', 'area', 'road', 'facing']
+  },
+  business: {
+    deals: ['sale', 'rent'], units: PLOT_UNITS, unit: 'aana', size: 'Land area', sizePh: '8', built: true, titlePh: 'Office space on New Road',
+    sub: ['Property type', ['Commercial building', 'Office', 'Hotel', 'Restaurant', 'Hostel', 'School', 'Warehouse', 'Factory', 'Showroom', 'Other']],
+    groups: [['Building', ['floors', 'rooms', 'bathrooms', 'parking', 'furnished', 'kitchen']],
+      ['Road', ['road_width', 'road_type', 'facing']],
+      ['Use', ['current_use', 'suitable_for']],
+      ['Other', ['built_year', 'water', 'electricity', 'internet']]],
+    suit: ['Hotel', 'Restaurant', 'Office', 'School', 'Hostel', 'Warehouse', 'Showroom', 'Other'], card: ['area', 'built', 'floors', 'road']
+  },
+  shutter: {
+    deals: ['rent', 'sale'], units: ROOM_UNITS, unit: 'sqft', size: 'Shutter size', sizePh: '350', titlePh: 'Shutter on the main road',
+    groups: [['Shutter details', ['floor', 'frontage', 'road_width', 'road_type', 'facing', 'parking', 'bathroom', 'water', 'electricity']],
+      ['Suitable business', ['suitable_for']]],
+    suit: ['Grocery', 'Restaurant', 'Clothing', 'Office', 'Salon', 'Workshop', 'Showroom', 'Warehouse', 'Other'], suitLabel: 'Suitable business', card: ['area', 'road', 'floor']
+  },
+  room: {
+    deals: ['rent'], units: ROOM_UNITS, unit: 'sqft', size: 'Room size', sizeOpt: true, sizePh: '150', titlePh: 'Single room with attached bathroom',
+    sub: ['Room type', ['Single room', 'Double room', 'Studio', 'Room + kitchen', 'Other']],
+    groups: [['Room details', ['floor', 'bathroom_type', 'furnished', 'parking', 'kitchen', 'bed', 'water', 'electricity', 'internet']],
+      ['Suitable for', ['suitable_for']]],
+    suit: ['Student', 'Working professional', 'Couple', 'Family', 'Anyone', 'Other'], card: ['sub', 'bathroom_type', 'parking', 'floor']
+  },
+  flat: {
+    deals: ['rent', 'sale'], units: ROOM_UNITS, unit: 'sqft', size: 'Flat size', sizePh: '950', titlePh: '2 BHK flat near Jhamsikhel',
+    sub: ['BHK', ['Studio', '1 BHK', '2 BHK', '3 BHK', '4 BHK', '5+ BHK', 'Other']],
+    groups: [['Flat details', ['bedrooms', 'bathrooms', 'floor', 'parking', 'furnished', 'kitchen', 'living_room', 'balcony', 'lift', 'water', 'electricity', 'internet', 'security', 'pets']],
+      ['Suitable for', ['suitable_for']]],
+    rentOnly: ['pets', 'suitable_for'], suit: ['Family', 'Students', 'Working professionals', 'Couple', 'Anyone', 'Other'], card: ['area', 'floor', 'parking', 'lift', 'furnished']
+  }
+};
+const KIND_NAMES = { land: 'Land', house: 'House', business: 'Business', shutter: 'Shutter', room: 'Room', flat: 'Flat' };
+const STATUSES = ['available', 'sold', 'rented', 'unavailable'];
+const STATUS_WORD = { available: 'Available', sold: 'Sold', rented: 'Rented', unavailable: 'Unavailable' };
+
 /* ---------- data ---------- */
-const DEF_SITE = { name: 'Ghar Jagga Map', tagline: 'Houses and land for sale, shutters and rooms for rent in the Kathmandu Valley', owner: '', phone: '', whatsapp: '', facebook: '', instagram: '', tiktok: '', about: '' };
+const DEF_SITE = { name: 'Ghar Jagga Map', tagline: 'Houses, land, flats, rooms and commercial properties for sale and rent in Kathmandu', owner: '', phone: '', whatsapp: '', facebook: '', instagram: '', tiktok: '', about: '' };
 const DEF_CATS = [
-  { id: 'house', label: 'House', deal: 'sale', color: 1, shape: 0 },
-  { id: 'land', label: 'Land', deal: 'sale', color: 2, shape: 1 },
-  { id: 'business', label: 'Business', deal: 'sale', color: 3, shape: 2, noRate: true },
-  { id: 'shutter', label: 'Shutter rent', deal: 'rent', color: 4, shape: 3 },
-  { id: 'room', label: 'Room rent', deal: 'rent', color: 5, shape: 4 }
+  { id: 'land', label: 'Land', deal: 'sale', color: 2, shape: 1, form: 'land' },
+  { id: 'house', label: 'House', deal: 'sale', color: 1, shape: 0, form: 'house' },
+  { id: 'business', label: 'Business', deal: 'sale', color: 3, shape: 2, form: 'business' },
+  { id: 'shutter', label: 'Shutter', deal: 'rent', color: 4, shape: 3, form: 'shutter' },
+  { id: 'room', label: 'Room', deal: 'rent', color: 5, shape: 4, form: 'room' },
+  { id: 'flat', label: 'Flat', deal: 'rent', color: 6, shape: 6, form: 'flat' }
 ];
 const state = { site: Object.assign({}, DEF_SITE), cats: DEF_CATS.slice(), listings: [] };
 
-const fromRow = r => ({
-  id: r.id, type: r.type, title: r.title || '', price: Number(r.price) || 0, rateMode: !!r.rate_mode,
-  area: { v: Number(r.area_value) || 0, u: r.area_unit || 'aana' }, place: r.place || '', district: r.district || '',
-  lat: Number(r.lat), lng: Number(r.lng), desc: r.description || '',
-  photos: Array.isArray(r.photos) ? r.photos.filter(okUrl) : [], status: r.status === 'sold' ? 'sold' : 'available', added: r.created_at || ''
-});
-const toRow = l => ({
-  id: l.id, type: l.type, title: l.title, price: Math.round(l.price) || 0, rate_mode: !!l.rateMode,
-  area_value: l.area.v || 0, area_unit: l.area.u, place: l.place, district: l.district, lat: l.lat, lng: l.lng,
-  description: l.desc, photos: l.photos, status: l.status, updated_at: new Date().toISOString()
-});
-const catFromRow = r => ({ id: r.id, label: r.label, deal: r.deal === 'rent' ? 'rent' : 'sale', color: r.color || 1, shape: r.shape || 0, noRate: !!r.no_rate, sort: r.sort || 0 });
+const catOf = id => state.cats.find(c => c.id === id) || { id: id, label: String(id || 'Other'), deal: 'sale', color: 8, shape: 2 };
+// Which of the six forms a category uses. Categories made before the update have no "form", so it is worked out.
+function kindOf(c) {
+  if (c.form && KINDS[c.form]) return c.form;
+  if (KINDS[c.id]) return c.id;
+  const n = String(c.label || '').toLowerCase();
+  if (/flat|apartment/.test(n)) return 'flat';
+  if (/shutter|shop/.test(n)) return 'shutter';
+  if (/room|hostel/.test(n)) return 'room';
+  if (/house|ghar|bungalow/.test(n)) return 'house';
+  if (/land|plot|jagga/.test(n)) return 'land';
+  return c.deal === 'rent' ? 'room' : c.noRate ? 'business' : 'land';
+}
+const K_of = l => KINDS[kindOf(catOf(l.type))];
+// The questions a form asks for this deal, in order.
+function fieldsOf(K, rent) {
+  const out = [];
+  K.groups.forEach(g => g[1].forEach(k => { if (rent || !(K.rentOnly && K.rentOnly.indexOf(k) >= 0)) out.push(k); }));
+  return out;
+}
+const labelOf = (k, K) => (k === 'suitable_for' && K.suitLabel) || FIELDS[k].label;
+const optsOf = (k, K) => (K.opts && K.opts[k]) || (k === 'suitable_for' ? K.suit || [] : FIELDS[k].opts);
+// Turns whatever was typed or stored into a clean value, or null when there is nothing to keep.
+function cleanVal(f, v) {
+  if (v == null || v === '') return null;
+  if (f.t === 'bool') return v === true ? true : null;
+  if (f.t === 'num' || f.t === 'int') {
+    const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/,/g, ''));
+    if (!isFinite(n) || n <= 0) return null;
+    const m = Math.min(f.max || 1e9, f.t === 'int' ? Math.round(n) : Math.round(n * 100) / 100);
+    return f.min && m < f.min ? null : m;
+  }
+  if (f.t === 'sel' && f.int) { const n = parseInt(v, 10); return isFinite(n) ? n : null; }
+  const s = String(v).trim().slice(0, f.max || 60);
+  return s || null;
+}
+
+function fromRow(r) {
+  const deal = r.deal_type === 'rent' || r.deal_type === 'sale' ? r.deal_type : catOf(r.type).deal;
+  const det = r.details && typeof r.details === 'object' && !Array.isArray(r.details) ? r.details : {};
+  const d = {};
+  Object.keys(FIELDS).forEach(k => { const v = cleanVal(FIELDS[k], FIELDS[k].col ? r[k] : det[k]); if (v != null) d[k] = v; });
+  let status = STATUSES.indexOf(r.status) >= 0 ? r.status : 'available';
+  if (status === 'sold' && deal === 'rent') status = 'rented';
+  return {
+    id: r.id, type: r.type, deal: deal, sub: String(r.property_subtype || ''), title: r.title || '', price: Number(r.price) || 0, rateMode: !!r.rate_mode,
+    area: { v: Number(r.area_value) || 0, u: r.area_unit || 'aana' },
+    built: { v: Number(r.built_up_area) || 0, u: r.built_up_area_unit === 'sqm' ? 'sqm' : 'sqft' },
+    deposit: Number(r.deposit) || 0, social: okUrl(r.social_post_url) ? r.social_post_url : '', d: d,
+    place: r.place || '', district: r.district || '', lat: Number(r.lat), lng: Number(r.lng), desc: r.description || '',
+    photos: Array.isArray(r.photos) ? r.photos.filter(okUrl) : [], status: status, added: r.created_at || ''
+  };
+}
+function toRow(l) {
+  const row = {
+    id: l.id, type: l.type, deal_type: l.deal, property_subtype: l.sub || null, title: l.title, price: Math.round(l.price) || 0, rate_mode: !!l.rateMode,
+    area_value: l.area.v || 0, area_unit: l.area.u,
+    built_up_area: l.built && l.built.v > 0 ? l.built.v : null, built_up_area_unit: l.built && l.built.v > 0 ? l.built.u : null,
+    deposit: l.deposit > 0 ? Math.round(l.deposit) : null, social_post_url: l.social || null,
+    place: l.place, district: l.district, lat: l.lat, lng: l.lng,
+    description: l.desc, photos: l.photos, status: l.status, updated_at: new Date().toISOString()
+  };
+  const det = {};
+  Object.keys(FIELDS).forEach(k => { const v = l.d[k]; if (FIELDS[k].col) row[k] = v == null ? null : v; else if (v != null) det[k] = v; });
+  row.details = det;
+  return row;
+}
+const catFromRow = r => ({ id: r.id, label: r.label, deal: r.deal === 'rent' ? 'rent' : 'sale', color: r.color || 1, shape: r.shape || 0, noRate: !!r.no_rate, sort: r.sort || 0, form: r.form || '' });
 
 async function loadAll() {
   const res = await Promise.all([
@@ -50,54 +219,25 @@ async function loadAll() {
   state.site = Object.assign({}, DEF_SITE, site && typeof site === 'object' ? site : {});
   state.cats = (res[1].data || []).map(catFromRow);
   if (!state.cats.length) state.cats = DEF_CATS.slice();
+  // Land, House, Business, Shutter, Room, Flat first, then the categories the owner added.
+  const rank = c => { const i = DEF_CATS.findIndex(d => d.id === c.id); return i >= 0 ? i : 100 + (c.sort || 0); };
+  state.cats.sort((x, y) => rank(x) - rank(y));
   state.listings = (res[2].data || []).map(fromRow).filter(l => isFinite(l.lat) && isFinite(l.lng));
 }
 
-/* ---------- Nepal districts (to name the district a pin falls in) ---------- */
-const NEPAL = { latMin: 26.3, latMax: 30.5, lngMin: 80.0, lngMax: 88.25 };
-// The area the site covers. The map opens on it and cannot be zoomed out or dragged beyond it.
+/* ---------- the area the map covers ---------- */
+// The map opens on it and cannot be zoomed out or dragged beyond it.
 // To cover more later, add MAP_AREA: [[southLat, westLng], [northLat, eastLng]] to js/config.js.
 const AREA = Array.isArray(CFG.MAP_AREA) ? CFG.MAP_AREA : [[27.55, 85.15], [27.85, 85.60]];
 const AREA_NAME = CFG.MAP_AREA_NAME || 'the Kathmandu Valley';
-const NEPAL_BOUNDS = AREA;
 const inArea = (lat, lng) => lat >= AREA[0][0] && lat <= AREA[1][0] && lng >= AREA[0][1] && lng <= AREA[1][1];
-const DISTRICTS = (window.NEPAL_GEO || []).map(g => {
-  const rings = g.r.map(str => {
-    const a = str.split(' ').map(Number), pts = [];
-    let x = 0, y = 0;
-    for (let i = 0; i + 1 < a.length; i += 2) { x += a[i]; y += a[i + 1]; pts.push([80 + x / 1000, 26 + y / 1000]); }
-    return pts;
-  });
-  let c = null, bestA = 0;
-  rings.forEach(r => {
-    let A = 0, cx = 0, cy = 0;
-    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
-      const f = r[j][0] * r[i][1] - r[i][0] * r[j][1];
-      A += f; cx += (r[j][0] + r[i][0]) * f; cy += (r[j][1] + r[i][1]) * f;
-    }
-    if (Math.abs(A) > bestA) { bestA = Math.abs(A); c = [cx / (3 * A), cy / (3 * A)]; }
-  });
-  return { name: g.n, prov: g.p, rings, c: c || rings[0][0] };
-});
-const districtByName = n => DISTRICTS.find(d => d.name === n) || null;
-function inRing(lon, lat, r) {
-  let inside = false;
-  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
-    const xi = r[i][0], yi = r[i][1], xj = r[j][0], yj = r[j][1];
-    if (((yi > lat) !== (yj > lat)) && (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi)) inside = !inside;
-  }
-  return inside;
-}
-function districtAt(lon, lat) {
-  for (const d of DISTRICTS) for (const r of d.rings) if (inRing(lon, lat, r)) return d;
-  let best = null, bd = Infinity;
-  DISTRICTS.forEach(d => { const dx = (d.c[0] - lon) * 0.88, dy = d.c[1] - lat, q = dx * dx + dy * dy; if (q < bd) { bd = q; best = d; } });
-  return best;
-}
-const inNepalBox = (lat, lng) => lat >= NEPAL.latMin && lat <= NEPAL.latMax && lng >= NEPAL.lngMin && lng <= NEPAL.lngMax;
 
 /* ---------- money and land units ---------- */
-const UNITS = { aana: ['anna', 342.25], ropani: ['ropani', 5476], bigha: ['bigha', 72900], kattha: ['kattha', 3645], dhur: ['dhur', 182.25], sqm: ['sq m', 10.7639], sqft: ['sq ft', 1] };
+// name, square feet in one unit. 1 Ropani = 16 Anna, 1 Anna = 4 Paisa, 1 Paisa = 4 Daam.
+const UNITS = {
+  ropani: ['Ropani', 5476], aana: ['Anna', 342.25], paisa: ['Paisa', 85.5625], daam: ['Daam', 21.390625],
+  bigha: ['Bigha', 72900], kattha: ['Kattha', 3645], dhur: ['Dhur', 182.25], sqft: ['sq ft', 1], sqm: ['sq m', 10.7639]
+};
 const SHAPES = [
   '<path class="shape" d="M0-10 10-1.5H7V8.5H-7V-1.5H-10Z"/>',
   '<path class="shape" d="M0-9.5 9.5 0 0 9.5-9.5 0Z"/>',
@@ -107,16 +247,21 @@ const SHAPES = [
   '<path class="shape" d="M0-9.5 9.5 7.5H-9.5Z"/>',
   '<path class="shape" d="M0-9.5 8.2-4.7V4.7L0 9.5-8.2 4.7V-4.7Z"/>'
 ];
-const catOf = id => state.cats.find(c => c.id === id) || { id: id, label: String(id || 'Other'), deal: 'sale', color: 8, shape: 2 };
-const isRent = l => catOf(l.type).deal === 'rent';
+const isRent = l => l.deal === 'rent';
 const cnum = c => (((c.color || 1) - 1) % 8) + 1;
 const cvar = c => 'var(--k' + cnum(c) + ')';
 const mvar = c => 'var(--m' + cnum(c) + ')';
 const shapeOf = c => SHAPES[(c.shape || 0) % SHAPES.length];
 const catIcon = c => '<svg class="ph-ico" viewBox="-13 -13 26 26" aria-hidden="true">' + shapeOf(c) + '</svg>';
-const soldWord = l => isRent(l) ? 'Rented out' : 'Sold';
-// "Land for sale", "Room rent": the category plus what kind of deal it is.
-const typeLine = c => c.deal === 'rent' ? (/rent/i.test(c.label) ? c.label : c.label + ' for rent') : c.label + ' for sale';
+const catName = c => String(c.label || '').replace(/\s+(for\s+)?rent$/i, '') || 'Property';
+// The line a visitor reads first: "Land for sale", "2 BHK Flat for rent", "Office for rent".
+function headline(l) {
+  const c = catOf(l.type), kind = kindOf(c);
+  let what = catName(c);
+  if (kind === 'flat' && l.sub && l.sub !== 'Other') what = l.sub === 'Studio' ? 'Studio flat' : l.sub + ' ' + what;
+  else if (kind === 'business') what = l.sub && l.sub !== 'Other' ? l.sub : (c.id === 'business' ? 'Commercial property' : what);
+  return what + (isRent(l) ? ' for rent' : ' for sale');
+}
 
 function groupIN(n) {
   const s = String(Math.round(n));
@@ -126,9 +271,9 @@ function groupIN(n) {
 const trimNum = n => String(Math.round(n * 100) / 100);
 function fmtNPR(n) {
   if (!isFinite(n) || n <= 0) return 'Price on request';
-  if (n >= 1e7) return 'Rs.\u00a0' + trimNum(n / 1e7) + ' crore';
-  if (n >= 1e5) return 'Rs.\u00a0' + trimNum(n / 1e5) + ' lakh';
-  return 'Rs.\u00a0' + groupIN(n);
+  if (n >= 1e7) return 'Rs. ' + trimNum(n / 1e7) + ' crore';
+  if (n >= 1e5) return 'Rs. ' + trimNum(n / 1e5) + ' lakh';
+  return 'Rs. ' + groupIN(n);
 }
 function parseMoney(str, rent) {
   if (!str) return null;
@@ -152,19 +297,28 @@ function parseMoney(str, rent) {
   if (!hadUnit && total < 1000) { total *= rent ? 1e3 : 1e5; assumed = true; }
   return { value: Math.round(total), assumed };
 }
+const sizeNum = (v, u) => (u === 'sqft' || u === 'sqm') && v >= 1000 ? groupIN(v) : trimNum(v);
 function areaText(l) {
   if (!l.area || !(l.area.v > 0) || !UNITS[l.area.u]) return '';
-  return trimNum(l.area.v) + ' ' + UNITS[l.area.u][0];
+  return sizeNum(l.area.v, l.area.u) + ' ' + UNITS[l.area.u][0];
 }
 function areaSqft(l) {
   if (!l.area || !(l.area.v > 0) || !UNITS[l.area.u] || l.area.u === 'sqft') return '';
   return groupIN(l.area.v * UNITS[l.area.u][1]) + ' sq ft';
 }
-// Price per anna (or per dhur / kattha in the Terai) for things sold by land size.
+const builtText = l => l.built && l.built.v > 0 ? sizeNum(l.built.v, l.built.u) + ' ' + UNITS[l.built.u][0] : '';
+// Size in square feet, to compare listings measured in different units.
+function sizeSqft(l) {
+  if (l.area && l.area.v > 0 && UNITS[l.area.u]) return l.area.v * UNITS[l.area.u][1];
+  if (l.built && l.built.v > 0) return l.built.v * UNITS[l.built.u][1];
+  return 0;
+}
+// Land is compared by its price per Anna (per Kattha or Dhur when it was measured that way).
+const rateUnit = u => u === 'dhur' ? 'dhur' : (u === 'kattha' || u === 'bigha') ? 'kattha' : 'aana';
 function rateOf(l) {
-  const c = catOf(l.type);
-  if (c.deal !== 'sale' || c.noRate || !(l.price > 0) || !l.area || !(l.area.v > 0) || !UNITS[l.area.u]) return null;
-  const u = l.area.u === 'dhur' ? 'dhur' : (l.area.u === 'kattha' || l.area.u === 'bigha') ? 'kattha' : 'aana';
+  const K = K_of(l);
+  if (!K.perUnit || isRent(l) || !(l.price > 0) || !l.area || !(l.area.v > 0) || !UNITS[l.area.u]) return null;
+  const u = rateUnit(l.area.u);
   const n = l.area.v * UNITS[l.area.u][1] / UNITS[u][1];
   return { v: l.price / n, u: u, label: UNITS[u][0] };
 }
@@ -180,6 +334,31 @@ function priceSub(l) {
   if (l.rateMode && rateOf(l)) return 'Total ' + fmtNPR(l.price);
   return rateText(l);
 }
+const bedsOf = l => l.d.bedrooms || parseInt(l.sub, 10) || 0;
+const parkText = v => v === 'Bike' ? 'Bike parking' : v === 'Car' ? 'Car parking' : v === 'Both' ? 'Bike and car parking' : v === 'None' ? 'No parking' : '';
+// The short facts on a card, different for each kind of property. Empty ones are left out.
+function cardFacts(l) {
+  const K = K_of(l), d = l.d, out = [];
+  K.card.forEach(k => {
+    let t = '';
+    if (k === 'area') t = areaText(l);
+    else if (k === 'built') t = builtText(l) ? builtText(l) + ' built-up' : '';
+    else if (k === 'rate') t = priceSub(l);
+    else if (k === 'road') t = d.road_width ? trimNum(d.road_width) + ' ft road' : '';
+    else if (k === 'facing') t = d.facing ? d.facing + ' facing' : '';
+    else if (k === 'bedrooms') t = d.bedrooms ? d.bedrooms + (d.bedrooms === 1 ? ' bedroom' : ' bedrooms') : '';
+    else if (k === 'floors') t = d.floors ? trimNum(d.floors) + (d.floors === 1 ? ' floor' : ' floors') : '';
+    else if (k === 'floor') t = d.floor != null ? floorText(d.floor) : '';
+    else if (k === 'parking') t = d.parking && d.parking !== 'None' ? (d.parking === 'Both' ? 'Parking' : parkText(d.parking)) : '';
+    else if (k === 'lift') t = d.lift ? 'Lift' : '';
+    else if (k === 'furnished') t = d.furnished || '';
+    else if (k === 'sub') t = l.sub && l.sub !== 'Other' ? l.sub : '';
+    else if (k === 'bathroom_type') t = d.bathroom_type ? d.bathroom_type + ' bathroom' : '';
+    if (t) out.push(t);
+  });
+  return out;
+}
+const placeLine = l => { const p = String(l.place || '').trim(), d = l.district || ''; return p && d && p.toLowerCase().indexOf(d.toLowerCase()) < 0 ? p + ', ' + d : p || d; };
 
 /* ---------- links ---------- */
 function socialUrl(kind, v) {
@@ -202,19 +381,52 @@ function waUrl(num, text) {
   return 'https://wa.me/' + d + (text ? '?text=' + encodeURIComponent(text) : '');
 }
 const SOCIALS = [['facebook', 'Facebook'], ['instagram', 'Instagram'], ['tiktok', 'TikTok']];
-const listingUrl = id => location.origin + location.pathname + '#p-' + id;
+// The link to one property's own post or video. Only the address is kept; nothing is fetched from it.
+// Returns '' for nothing typed and null when what was typed is not a link.
+function postUrl(v) {
+  v = String(v || '').trim();
+  if (!v) return '';
+  const m = v.match(/https?:\/\/\S+/i);
+  if (m) v = m[0];
+  else if (/^[\w.-]+\.[a-z]{2,}(\/\S*)?$/i.test(v)) v = 'https://' + v;
+  else return null;
+  try {
+    const u = new URL(v);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+    u.protocol = 'https:';
+    return okUrl(u.href) && u.href.length <= 500 ? u.href : null;
+  } catch (e) { return null; }
+}
+function postSite(u) {
+  try {
+    const h = new URL(u).hostname.replace(/^(www|m|web|vm|vt)\./, '');
+    if (/(^|\.)facebook\.com$|^fb\.(watch|com|me)$/.test(h)) return 'Facebook';
+    if (/(^|\.)instagram\.com$/.test(h)) return 'Instagram';
+    if (/(^|\.)tiktok\.com$/.test(h)) return 'TikTok';
+    if (/(^|\.)youtube\.com$|^youtu\.be$/.test(h)) return 'YouTube';
+  } catch (e) {}
+  return '';
+}
+const listingUrl = id => location.origin + BASE + 'property/' + id;
 
 /* ---------- view state ---------- */
-const filter = { type: 'all', district: '', place: '', sort: 'new' };
-const placeName = l => String(l.place || '').split(',')[0].trim() || l.district || 'Other';
-const placeKey = l => (placeName(l) + '|' + (l.district || '')).toLowerCase();
+const filter = { type: 'all', deal: 'all', place: '', sort: 'new', minP: 0, maxP: 0, minSize: 0, beds: 0, road: 0 };
+const placeName = l => String(l.place || '').split(',')[0].trim() || 'Other';
+const placeKey = l => placeName(l).toLowerCase();
 let budget = null, budgetIds = null, selectedId = null;
 let owner = false, busy = false, aiOn = false, aiCtl = null;
 const byId = id => state.listings.find(l => l.id === id) || null;
-const dlgDetail = $('#dlgDetail'), dlgContact = $('#dlgContact'), dlgEdit = $('#dlgEdit'), dlgSite = $('#dlgSite'), dlgCats = $('#dlgCats'), dlgLogin = $('#dlgLogin');
+// Visitors never see a listing marked unavailable (the database does not send it to them either).
+const shown = () => owner ? state.listings : state.listings.filter(l => l.status !== 'unavailable');
+const dlgDetail = $('#dlgDetail'), dlgContact = $('#dlgContact'), dlgEdit = $('#dlgEdit'), dlgSite = $('#dlgSite'), dlgCats = $('#dlgCats'), dlgLogin = $('#dlgLogin'), dlgManage = $('#dlgManage'), dlgConfirm = $('#dlgConfirm');
 
+// Dialogs can sit on top of each other (Manage listings, then a property, then Contact). This keeps their order.
+const stack = [];
+function show(d) { if (d.open) return; d.showModal(); stack.push(d); }
 function toast(msg) {
   const t = $('#toast');
+  // A message must show above an open dialog, so it moves into the top one.
+  (stack[stack.length - 1] || document.body).appendChild(t);
   t.textContent = msg; t.hidden = false;
   clearTimeout(toast._t);
   toast._t = setTimeout(() => { t.hidden = true; }, 4200);
@@ -245,12 +457,12 @@ let mapItems = [];
 function pinIcon(l, cls) {
   const c = catOf(l.type);
   return L.divIcon({
-    className: 'pin-ico' + (l.status === 'sold' ? ' sold' : '') + (l.id === selectedId ? ' sel' : '') + (cls ? ' ' + cls : ''),
+    className: 'pin-ico' + (l.status !== 'available' ? ' sold' : '') + (l.id === selectedId ? ' sel' : '') + (cls ? ' ' + cls : ''),
     html: '<svg viewBox="-13 -13 26 26" style="--c:' + mvar(c) + '">' + shapeOf(c) + '</svg>', iconSize: [36, 36], iconAnchor: [18, 18]
   });
 }
 function addPin(l) {
-  const label = catOf(l.type).label + ': ' + l.title + ', ' + priceText(l);
+  const label = headline(l) + ': ' + l.title + ', ' + priceText(l);
   L.marker([l.lat, l.lng], { icon: pinIcon(l), title: label, alt: label, zIndexOffset: l.id === selectedId ? 1000 : 0 })
     .on('click', () => openDetail(l.id)).addTo(markLayer);
 }
@@ -274,8 +486,7 @@ function drawMap() {
   clusters.forEach(c => {
     if (c.items.length === 1) { addPin(c.items[0]); return; }
     const samePlace = c.items.every(l => placeKey(l) === placeKey(c.items[0]));
-    const sameDist = c.items.every(l => l.district === c.items[0].district);
-    const name = samePlace ? placeName(c.items[0]) : sameDist ? (c.items[0].district || '') : '';
+    const name = samePlace ? placeName(c.items[0]) : '';
     const label = (name ? name + ': ' : '') + c.items.length + ' properties here. Tap to zoom in.';
     L.marker(map.unproject([c.x, c.y], z), { icon: L.divIcon({ className: 'pbub-wrap', html: '<span class="pbub"><b>' + c.items.length + '</b>' + esc(name || 'properties') + '</span>', iconSize: [0, 0] }), title: label, alt: label, zIndexOffset: 500 })
       .on('click', () => {
@@ -326,7 +537,7 @@ map.addControl(new LocateCtl());
 function renderHeader() {
   const name = state.site.name || DEF_SITE.name;
   $('#siteName').textContent = name;
-  document.title = name;
+  setTitle();
   $('#siteTag').textContent = state.site.tagline || '';
   $('#siteTag').hidden = !state.site.tagline;
   const nav = $('#socialNav');
@@ -343,42 +554,58 @@ function renderHeader() {
   about.textContent = state.site.about || '';
   about.hidden = !state.site.about;
 }
+function setTitle(l) {
+  const name = state.site.name || DEF_SITE.name;
+  document.title = l ? l.title + ', ' + priceText(l).replace(/ /g, ' ') + ' | ' + name : name + ': Kathmandu houses, land, flats and rooms';
+}
 function renderLegend() {
-  $('#legend').innerHTML = state.cats.map(c => '<span style="--c:' + mvar(c) + '"><svg viewBox="-12 -12 24 24">' + shapeOf(c) + '</svg>' + esc(c.label) + '</span>').join('') +
+  $('#legend').innerHTML = state.cats.map(c => '<span style="--c:' + mvar(c) + '"><svg viewBox="-12 -12 24 24">' + shapeOf(c) + '</svg>' + esc(catName(c)) + '</span>').join('') +
     '<span class="legend-note">Tap a number to zoom in. Tap a pin for details.</span>';
 }
 
 /* ---------- list ---------- */
 function matches(l) {
   if (filter.type !== 'all' && l.type !== filter.type) return false;
-  if (filter.district && l.district !== filter.district) return false;
+  if (filter.deal !== 'all' && l.deal !== filter.deal) return false;
   if (filter.place && placeKey(l) !== filter.place) return false;
+  if (filter.minP && !(l.price >= filter.minP)) return false;
+  if (filter.maxP && !(l.price > 0 && l.price <= filter.maxP)) return false;
+  if (filter.minSize && !(sizeSqft(l) >= filter.minSize * 0.999)) return false;
+  if (filter.beds && !(bedsOf(l) >= filter.beds)) return false;
+  if (filter.road && !(l.d.road_width >= filter.road)) return false;
   if (budgetIds && !budgetIds.has(l.id)) return false;
   return true;
 }
+const moreCount = () => [filter.minP, filter.maxP, filter.minSize, filter.beds, filter.road].filter(Boolean).length;
+function statusTag(l) {
+  if (l.status === 'available') return '';
+  return '<span class="tagx sold">' + (l.status === 'unavailable' ? 'Unavailable, hidden from visitors' : STATUS_WORD[l.status]) + '</span>';
+}
 function badges(l) {
-  const c = catOf(l.type);
-  return '<span class="badge" style="--c:' + cvar(c) + '">' + esc(typeLine(c)) + '</span>' +
-    (l.status === 'sold' ? '<span class="tagx sold">' + soldWord(l) + '</span>' : '');
+  return '<span class="badge" style="--c:' + cvar(catOf(l.type)) + '">' + esc(headline(l)) + '</span>' + statusTag(l);
 }
 function renderList() {
-  const all = state.listings;
-  const counts = { all: all.length };
-  all.forEach(l => { counts[l.type] = (counts[l.type] || 0) + 1; });
+  const all = shown();
+  const counts = { all: all.length }, deals = { all: all.length, sale: 0, rent: 0 };
+  all.forEach(l => { counts[l.type] = (counts[l.type] || 0) + 1; deals[l.deal]++; });
   if (filter.type !== 'all' && !state.cats.some(c => c.id === filter.type)) filter.type = 'all';
-  $('#typeChips').innerHTML = [['all', 'All']].concat(state.cats.map(c => [c.id, c.label])).map(([k, label]) =>
+  $('#dealChips').innerHTML = [['all', 'All'], ['sale', 'For sale'], ['rent', 'For rent']].map(([k, label]) =>
+    '<button class="chip" type="button" data-deal="' + k + '" aria-pressed="' + (filter.deal === k) + '">' + label + '<b>' + deals[k] + '</b></button>').join('');
+  $('#typeChips').innerHTML = [['all', 'All types']].concat(state.cats.map(c => [c.id, catName(c)])).map(([k, label]) =>
     '<button class="chip" type="button" data-type="' + esc(k) + '" aria-pressed="' + (filter.type === k) + '">' + esc(label) + '<b>' + (counts[k] || 0) + '</b></button>').join('');
-  $('#budgetType').innerHTML = '<option value="all">Anything to buy</option>' + state.cats.map(c => '<option value="' + esc(c.id) + '">' + esc(c.label) + '</option>').join('');
-  $('#budgetQuick').hidden = filter.type !== 'all' && catOf(filter.type).deal === 'rent';
-
-  const names = Array.from(new Set(all.map(l => l.district).filter(Boolean)));
-  if (filter.district && names.indexOf(filter.district) < 0) names.push(filter.district);
-  names.sort();
-  const sel = $('#districtSel');
-  sel.innerHTML = '<option value="">All districts</option>' + names.map(n => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('');
-  sel.value = filter.district;
-  $('#sortSel').value = filter.sort;
+  $('#budgetType').innerHTML = '<option value="all">Anything</option>' + state.cats.map(c => '<option value="' + esc(c.id) + '">' + esc(catName(c)) + '</option>').join('');
   $('#budgetType').value = filter.type;
+  $('#budgetQuick').hidden = budgetDeal() === 'rent';
+
+  const places = new Map();
+  all.forEach(l => { if (!places.has(placeKey(l))) places.set(placeKey(l), placeName(l)); });
+  if (filter.place && !places.has(filter.place)) filter.place = '';
+  const sel = $('#placeSel');
+  sel.innerHTML = '<option value="">All places</option>' + Array.from(places.entries()).sort((a, b) => a[1].localeCompare(b[1])).map(e => '<option value="' + esc(e[0]) + '">' + esc(e[1]) + '</option>').join('');
+  sel.value = filter.place;
+  $('#sortSel').value = filter.sort;
+  const mc = moreCount();
+  $('#moreBtn').textContent = 'More filters' + (mc ? ' (' + mc + ')' : '');
 
   let arr = all.filter(matches);
   if (filter.sort === 'low') arr = arr.slice().sort((a, b) => (a.price || Infinity) - (b.price || Infinity));
@@ -386,10 +613,10 @@ function renderList() {
   else if (filter.sort === 'near' && me) arr = arr.slice().sort((a, b) => kmFrom(a) - kmFrom(b));
 
   const bits = [];
-  const pl = filter.place ? all.find(l => placeKey(l) === filter.place) : null;
-  if (pl) bits.push('in ' + placeName(pl));
-  if (filter.district) bits.push('in ' + filter.district + ' district');
+  if (filter.deal !== 'all') bits.push(filter.deal === 'rent' ? 'for rent' : 'for sale');
+  if (filter.place) bits.push('in ' + places.get(filter.place));
   if (budget) bits.push('within or near ' + fmtNPR(budget.value));
+  if (mc) bits.push(mc === 1 ? '1 more filter' : mc + ' more filters');
   $('#countLine').textContent = arr.length + (arr.length === 1 ? ' property ' : ' properties ') + bits.join(', ');
 
   const ul = $('#cards');
@@ -400,18 +627,18 @@ function renderList() {
     ul.innerHTML = arr.map(l => {
       const ph = (l.photos || []).find(okUrl);
       const c = catOf(l.type);
-      const place = [l.place, l.district].filter(Boolean).join(', ');
-      const meta = [areaText(l), priceSub(l), kmText(kmFrom(l))].filter(Boolean).join(' • ');
+      const facts = cardFacts(l).concat(kmText(kmFrom(l)) || []);
       return '<li class="card' + (l.id === selectedId ? ' sel' : '') + '" data-id="' + esc(l.id) + '">' +
         '<button class="card-main" type="button" data-open>' +
-        '<span class="thumb" style="--c:' + cvar(c) + '">' + (ph ? '<img src="' + esc(ph) + '" alt="" loading="lazy">' : catIcon(c)) + '</span>' +
+        '<span class="thumb" style="--c:' + cvar(c) + '">' + (ph ? '<img src="' + esc(ph) + '" alt="" loading="lazy">' : catIcon(c)) +
+        (l.photos.length > 1 ? '<span class="pcount">' + l.photos.length + ' photos</span>' : '') + '</span>' +
         '<span class="card-body"><span class="card-top">' + badges(l) + '</span>' +
         '<span class="card-title">' + esc(l.title) + '</span>' +
         '<span class="card-price">' + esc(priceText(l)) + '</span>' +
-        (place ? '<span class="card-place">' + esc(place) + '</span>' : '') +
-        (meta ? '<span class="card-meta">' + esc(meta) + '</span>' : '') + '</span></button>' +
+        (facts.length ? '<span class="cfacts">' + facts.map(f => '<span>' + esc(f) + '</span>').join('') + '</span>' : '') +
+        (placeLine(l) ? '<span class="card-place">' + esc(placeLine(l)) + '</span>' : '') + '</span></button>' +
         '<div class="card-foot"><button class="btn small" type="button" data-details>View details</button>' +
-        '<button class="btn small primary" type="button" data-talk>Talk to me</button>' +
+        '<button class="btn small primary" type="button" data-talk>Contact</button>' +
         (owner ? '<button class="btn small" type="button" data-edit>Edit</button>' : '') + '</div></li>';
     }).join('');
   }
@@ -420,58 +647,70 @@ function renderList() {
   renderPlaces();
 }
 function placeGroups() {
-  const byD = new Map();
-  state.listings.forEach(l => {
-    const d = l.district || 'Other', k = placeKey(l);
-    if (!byD.has(d)) byD.set(d, new Map());
-    const m = byD.get(d);
+  const m = new Map();
+  shown().forEach(l => {
+    const k = placeKey(l);
     if (!m.has(k)) m.set(k, { key: k, name: placeName(l), n: 0, pts: [], rates: {} });
     const g = m.get(k);
-    if (l.status !== 'sold') g.n++;
+    if (l.status === 'available') g.n++;
     g.pts.push({ lat: l.lat, lng: l.lng });
-    if (l.type === 'land' && l.status !== 'sold') {
+    if (l.status === 'available') {
       const r = rateOf(l);
       if (r) { const a = g.rates[r.u] || (g.rates[r.u] = { p: 0, n: 0, k: 0 }); a.p += l.price; a.n += l.price / r.v; a.k++; }
     }
   });
-  const out = Array.from(byD.entries()).map(e => ({ district: e[0], places: Array.from(e[1].values()) }));
-  out.forEach(g => {
-    g.places.forEach(p => {
-      const u = Object.keys(p.rates).sort((a, b) => p.rates[b].k - p.rates[a].k)[0];
-      p.landRate = u ? { v: p.rates[u].p / p.rates[u].n, u: u, label: UNITS[u][0] } : null;
-    });
-    g.places.sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
+  const out = Array.from(m.values());
+  out.forEach(p => {
+    const u = Object.keys(p.rates).sort((a, b) => p.rates[b].k - p.rates[a].k)[0];
+    p.landRate = u ? { v: p.rates[u].p / p.rates[u].n, u: u, label: UNITS[u][0] } : null;
   });
-  return out.sort((a, b) => b.places.reduce((s, p) => s + p.n, 0) - a.places.reduce((s, p) => s + p.n, 0) || a.district.localeCompare(b.district));
+  return out.sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
 }
 function renderPlaces() {
-  const groups = placeGroups();
-  $('#placesBox').hidden = !groups.length;
-  $('#placesList').innerHTML = groups.map(g => '<div class="pgroup"><span class="pd">' + esc(g.district) + '</span>' +
-    g.places.map(p => '<button class="prow" type="button" data-place="' + esc(p.key) + '" aria-pressed="' + (filter.place === p.key) + '"><span class="pn">' + esc(p.name) + '</span><span class="pm">' + p.n + ' available</span>' +
-      (p.landRate ? '<span class="pr">Land about ' + esc(fmtNPR(p.landRate.v)) + ' per ' + p.landRate.label + '</span>' : '') + '</button>').join('') + '</div>').join('');
+  const places = placeGroups();
+  $('#placesBox').hidden = !places.length;
+  $('#placesList').innerHTML = '<div class="pgroup">' + places.map(p => '<button class="prow" type="button" data-place="' + esc(p.key) + '" aria-pressed="' + (filter.place === p.key) + '"><span class="pn">' + esc(p.name) + '</span><span class="pm">' + p.n + ' available</span>' +
+    (p.landRate ? '<span class="pr">Land about ' + esc(fmtNPR(p.landRate.v)) + ' per ' + p.landRate.label + '</span>' : '') + '</button>').join('') + '</div>';
 }
 const rerun = () => { if (budget) runBudget(); else renderList(); };
-$('#placesList').addEventListener('click', e => {
-  const b = e.target.closest('[data-place]'); if (!b) return;
-  const k = b.dataset.place;
-  filter.place = filter.place === k ? '' : k;
-  filter.district = '';
+function pickPlace(k) {
+  filter.place = k;
   rerun();
-  if (filter.place) fitPoints(state.listings.filter(l => placeKey(l) === k)); else map.fitBounds(NEPAL_BOUNDS);
-});
+  if (k) fitPoints(shown().filter(l => placeKey(l) === k)); else map.fitBounds(AREA);
+}
+$('#placesList').addEventListener('click', e => { const b = e.target.closest('[data-place]'); if (b) pickPlace(filter.place === b.dataset.place ? '' : b.dataset.place); });
+$('#placeSel').addEventListener('change', e => pickPlace(e.target.value));
 $('#typeChips').addEventListener('click', e => { const b = e.target.closest('[data-type]'); if (!b) return; filter.type = b.dataset.type; rerun(); });
-$('#districtSel').addEventListener('change', e => {
-  filter.district = e.target.value; filter.place = '';
-  rerun();
-  if (filter.district) fitPoints(state.listings.filter(l => l.district === filter.district)); else map.fitBounds(NEPAL_BOUNDS);
-});
+$('#dealChips').addEventListener('click', e => { const b = e.target.closest('[data-deal]'); if (!b) return; filter.deal = b.dataset.deal; rerun(); });
 $('#sortSel').addEventListener('change', e => {
   filter.sort = e.target.value;
   if (filter.sort === 'near' && !me) locate(() => {}); else renderList();
 });
+$('#moreBtn').addEventListener('click', () => {
+  const box = $('#moreBox');
+  box.hidden = !box.hidden;
+  $('#moreBtn').setAttribute('aria-expanded', String(!box.hidden));
+});
+function readMore() {
+  const err = $('#fl_err');
+  err.hidden = true;
+  const money = id => { const v = $(id).value.trim(); if (!v) return 0; const p = parseMoney(v, filter.deal === 'rent'); if (!p) { err.textContent = 'Type the price as a number, for example 50 lakh, 1.2 crore or 25000.'; err.hidden = false; return 0; } return p.value; };
+  filter.minP = money('#fl_min'); filter.maxP = money('#fl_max');
+  const sz = parseFloat($('#fl_size').value);
+  filter.minSize = sz > 0 ? sz * UNITS[$('#fl_sizeUnit').value][1] : 0;
+  filter.beds = +$('#fl_beds').value || 0;
+  filter.road = +$('#fl_road').value || 0;
+  rerun();
+}
+['#fl_min', '#fl_max', '#fl_size', '#fl_sizeUnit', '#fl_beds', '#fl_road'].forEach(s => $(s).addEventListener('change', readMore));
+function clearMore() {
+  ['#fl_min', '#fl_max', '#fl_size'].forEach(s => { $(s).value = ''; });
+  $('#fl_beds').value = '0'; $('#fl_road').value = '0'; $('#fl_err').hidden = true;
+  filter.minP = filter.maxP = filter.minSize = filter.beds = filter.road = 0;
+}
+$('#fl_clear').addEventListener('click', () => { clearMore(); rerun(); });
 $('#cards').addEventListener('click', e => {
-  if (e.target.closest('[data-clear]')) { filter.type = 'all'; filter.district = ''; filter.place = ''; clearBudget(); map.fitBounds(NEPAL_BOUNDS); return; }
+  if (e.target.closest('[data-clear]')) { filter.type = 'all'; filter.deal = 'all'; filter.place = ''; clearMore(); clearBudget(); map.fitBounds(AREA); return; }
   const li = e.target.closest('.card'); if (!li) return;
   const id = li.dataset.id;
   if (e.target.closest('[data-details]')) openDetail(id);
@@ -493,21 +732,28 @@ function showOnMap(id) {
 }
 
 /* ---------- budget helper ---------- */
+// Is the visitor buying or renting? Taken from the Sale / Rent filter, or from a category that only does one.
+function budgetDeal() {
+  if (filter.deal !== 'all') return filter.deal;
+  if (filter.type === 'all') return 'sale';
+  const ds = KINDS[kindOf(catOf(filter.type))].deals;
+  return ds.length === 1 ? ds[0] : '';
+}
 function explainBudget(b) {
   const cat = filter.type === 'all' ? null : catOf(filter.type);
-  const rent = !!cat && cat.deal === 'rent';
+  const rent = b.deal === 'rent';
   const money = n => fmtNPR(n) + (rent ? ' a month' : '');
-  const pool = state.listings.filter(l => l.status !== 'sold' && l.price > 0 && (cat ? l.type === cat.id : !isRent(l)) && (!filter.district || l.district === filter.district) && (!filter.place || placeKey(l) === filter.place));
-  const word = cat ? cat.label.toLowerCase() + ' listings' : 'properties for sale';
-  const plc = filter.place ? state.listings.find(l => placeKey(l) === filter.place) : null;
-  const where = plc ? ' in ' + placeName(plc) : filter.district ? ' in ' + filter.district : '';
+  const pool = shown().filter(l => l.status === 'available' && l.price > 0 && l.deal === b.deal && (!cat || l.type === cat.id) && (!filter.place || placeKey(l) === filter.place));
+  const word = (cat ? catName(cat).toLowerCase() + ' listings' : 'properties') + (rent ? ' for rent' : ' for sale');
+  const plc = filter.place ? shown().find(l => placeKey(l) === filter.place) : null;
+  const where = plc ? ' in ' + placeName(plc) : '';
   const fits = pool.filter(l => l.price <= b.value).sort((a, c) => c.price - a.price);
   const near = pool.filter(l => l.price > b.value && l.price <= b.value * 1.15).sort((a, c) => a.price - c.price);
   const lines = [];
   const pu = l => { const t = rateText(l); return t ? ' (' + t + ')' : ''; };
   if (!pool.length) {
     lines.push('There are no ' + word + where + ' with a price listed here right now.');
-    lines.push('Talk to me and I will tell you what is coming up.');
+    lines.push('Contact me and I will tell you what is coming up.');
   } else if (fits.length) {
     lines.push('With ' + money(b.value) + ' you can afford ' + fits.length + ' of the ' + pool.length + ' ' + word + where + '.');
     const top = fits[0], left = b.value - top.price;
@@ -524,15 +770,13 @@ function explainBudget(b) {
     const n = near[0];
     lines.push((near.length === 1 ? 'One more is' : near.length + ' more are') + ' just above your budget. ' + n.title + ' costs ' + money(n.price) + ', which is ' + fmtNPR(n.price - b.value) + ' more. It is worth asking if the price can come down.');
   }
-  if (!rent && (!cat || cat.id === 'land')) {
-    const spots = [];
-    placeGroups().forEach(g => g.places.forEach(p => { if (p.landRate && (!filter.place || p.key === filter.place) && (!filter.district || g.district === filter.district)) spots.push(p); }));
-    spots.slice(0, 3).forEach(p => {
+  if (!rent && (!cat || kindOf(cat) === 'land')) {
+    placeGroups().filter(p => p.landRate && (!filter.place || p.key === filter.place)).slice(0, 3).forEach(p => {
       lines.push('In ' + p.name + ', land is about ' + fmtNPR(p.landRate.v) + ' per ' + p.landRate.label + '. Your budget buys about ' + trimNum(Math.round(b.value / p.landRate.v * 10) / 10) + ' ' + p.landRate.label + ' there.');
     });
   }
   if (b.assumed) lines.push('You typed a small number, so it was read as ' + money(b.value) + '.');
-  lines.push(rent ? 'Ask me about the deposit and what the rent includes.' : 'These are asking prices. Talk to me before you decide.');
+  lines.push(rent ? 'Ask me about the deposit and what the rent includes.' : 'These are asking prices. Contact me before you decide.');
   return { lines, fits, near };
 }
 function runBudget() {
@@ -555,26 +799,29 @@ function clearBudget() {
   renderList();
 }
 function submitBudget(text) {
-  const pick = $('#budgetType').value;
-  const b = parseMoney(text, pick !== 'all' && catOf(pick).deal === 'rent');
+  filter.type = $('#budgetType').value;
+  const fixed = budgetDeal();
+  const guess = fixed || KINDS[kindOf(catOf(filter.type))].deals[0];
+  const b = parseMoney(text, guess === 'rent');
   const out = $('#budgetText');
   if (!b) {
     budget = null; budgetIds = null;
     out.textContent = '';
     const p = document.createElement('p'); p.className = 'err';
-    p.textContent = 'Type your budget as a number, for example 50 lakh, 1.2 crore or 5000000.';
+    p.textContent = 'Type your budget as a number, for example 50 lakh, 1.2 crore or 25000 a month.';
     out.appendChild(p);
     $('#budgetOut').hidden = false; $('#aiBox').hidden = true;
     renderList();
     return;
   }
+  // A category that can be bought or rented: a small amount means rent, a large one means buying.
+  b.deal = fixed || (b.value < 5e5 ? 'rent' : 'sale');
   budget = b;
-  filter.type = pick;
   runBudget();
 }
 $('#budgetForm').addEventListener('submit', e => { e.preventDefault(); submitBudget($('#budgetInput').value); });
 $('#budgetQuick').addEventListener('click', e => { const b = e.target.closest('[data-b]'); if (!b) return; $('#budgetInput').value = b.dataset.b; submitBudget(b.dataset.b); });
-$('#budgetType').addEventListener('change', e => { filter.type = e.target.value; rerun(); });
+$('#budgetType').addEventListener('change', e => { filter.type = e.target.value; if (budget) submitBudget($('#budgetInput').value); else renderList(); });
 $('#budgetClear').addEventListener('click', clearBudget);
 
 /* ---------- optional AI explanation (needs the /api/explain function and a key, see SETUP.md) ---------- */
@@ -586,10 +833,11 @@ function resetAi() {
 $('#aiBtn').addEventListener('click', async () => {
   if (!aiOn || !budget) return;
   const out = $('#aiText'), btn = $('#aiBtn'), stop = $('#aiStop');
-  const rent = filter.type !== 'all' && catOf(filter.type).deal === 'rent';
-  const rows = state.listings.filter(l => l.status !== 'sold').slice(0, 60).map(l => ({
-    title: l.title, category: catOf(l.type).label, deal: isRent(l) ? 'rent per month' : 'sale', price_npr: l.price || null,
-    price_per_land_unit: rateText(l), size: [areaText(l), areaSqft(l)].filter(Boolean).join(' = '), place: l.place || '', district: l.district || '', notes: String(l.desc || '').slice(0, 200)
+  const rent = budget.deal === 'rent';
+  const rows = shown().filter(l => l.status === 'available').slice(0, 60).map(l => ({
+    title: l.title, category: headline(l), deal: isRent(l) ? 'rent per month' : 'sale', price_npr: l.price || null,
+    price_per_land_unit: rateText(l), size: [areaText(l), areaSqft(l)].filter(Boolean).join(' = '), place: l.place || '', district: l.district || '',
+    notes: cardFacts(l).concat(String(l.desc || '').slice(0, 200)).filter(Boolean).join('. ')
   }));
   aiCtl = new AbortController();
   const ctl = aiCtl;
@@ -597,7 +845,7 @@ $('#aiBtn').addEventListener('click', async () => {
   try {
     const r = await fetch('/api/explain', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ctl.signal,
-      body: JSON.stringify({ budget: budget.value, perMonth: rent, looking: filter.type === 'all' ? 'anything to buy' : catOf(filter.type).label, district: filter.district, want: $('#aiWant').value.trim().slice(0, 300), listings: rows })
+      body: JSON.stringify({ budget: budget.value, perMonth: rent, looking: (filter.type === 'all' ? 'anything' : catName(catOf(filter.type))) + (rent ? ' to rent' : ' to buy'), district: DISTRICT, want: $('#aiWant').value.trim().slice(0, 300), listings: rows })
     });
     const j = await r.json().catch(() => null);
     if (!r.ok || !j || !j.text) throw new Error(j && j.error || 'failed');
@@ -614,48 +862,99 @@ $('#aiBtn').addEventListener('click', async () => {
 $('#aiStop').addEventListener('click', () => { if (aiCtl) aiCtl.abort(); });
 
 /* ---------- property details ---------- */
-function setHash(id) { try { history.replaceState(null, '', id ? '#p-' + id : location.pathname + location.search); } catch (e) {} }
+// Each property has its own address, /property/<id>, so it can be shared.
+function setUrl(id) { try { history.replaceState(null, '', id ? BASE + 'property/' + id : BASE); } catch (e) {} }
+let detailMap = null;
+function dropDetailMap() { if (detailMap) { try { detailMap.remove(); } catch (e) {} detailMap = null; } }
+function statusOptions(l) {
+  return ['available', isRent(l) ? 'rented' : 'sold', 'unavailable'].map(s => '<option value="' + s + '"' + (l.status === s ? ' selected' : '') + '>' + STATUS_WORD[s] + (s === 'unavailable' ? ' (hidden)' : '') + '</option>').join('');
+}
+// Every fact that was filled in, in the order of the form. Empty ones are left out.
+function detailFacts(l) {
+  const K = K_of(l), d = l.d, out = [];
+  const landUnit = l.area.u !== 'sqft' && l.area.u !== 'sqm';
+  if (K.sub && l.sub) out.push([K.sub[0], l.sub]);
+  if (areaText(l)) out.push([K.size, areaText(l) + (landUnit && areaSqft(l) ? ' (' + areaSqft(l) + ')' : '')]);
+  if (builtText(l)) out.push(['Built-up area', builtText(l)]);
+  if (rateOf(l)) out.push(l.rateMode ? ['Total price', fmtNPR(l.price)] : ['Price per ' + rateOf(l).label, fmtNPR(rateOf(l).v)]);
+  if (isRent(l) && l.deposit > 0) out.push(['Deposit', fmtNPR(l.deposit)]);
+  fieldsOf(K, isRent(l)).forEach(k => {
+    const f = FIELDS[k], v = d[k];
+    if (v == null || f.t === 'bool') return;
+    let t = String(v);
+    if (f.unit) t = trimNum(v) + ' ' + f.unit;
+    else if (k === 'floor') t = floorText(v);
+    else if (k === 'floors') t = trimNum(v);
+    else if (k === 'road_sides') t = v + (v === 1 ? ' side' : ' sides');
+    else if (k === 'parking') t = parkText(v) || t;
+    out.push([labelOf(k, K), t]);
+  });
+  if (l.place) out.push(['Place', l.place]);
+  if (l.district) out.push(['District', l.district]);
+  if (me) out.push(['Distance', kmText(kmFrom(l))]);
+  out.push(['Status', STATUS_WORD[l.status]]);
+  return out;
+}
+const featuresOf = l => fieldsOf(K_of(l), isRent(l)).filter(k => FIELDS[k].t === 'bool' && l.d[k] === true).map(k => FIELDS[k].label);
 function openDetail(id) {
   const l = byId(id); if (!l) return;
   selectedId = id;
   renderList();
+  dropDetailMap();
   const photos = (l.photos || []).filter(okUrl);
-  const D = districtByName(l.district);
   const cat = catOf(l.type);
-  const sub = [priceSub(l), !isRent(l) && l.price >= 1e5 ? 'Rs.\u00a0' + groupIN(l.price) : ''].filter(Boolean).join(' · ');
-  const facts = [];
-  if (areaText(l)) facts.push(['Size', areaText(l) + (areaSqft(l) ? ' (' + areaSqft(l) + ')' : '')]);
-  if (rateText(l)) facts.push(['Price per ' + rateOf(l).label, rateText(l)]);
-  if (l.place) facts.push(['Place', l.place]);
-  if (l.district) facts.push(['District', l.district + (D ? ', ' + D.prov + ' Province' : '')]);
-  if (me) facts.push(['Distance', kmText(kmFrom(l))]);
-  facts.push(['Status', l.status === 'sold' ? soldWord(l) : 'Available']);
+  const sub = [priceSub(l), !isRent(l) && l.price >= 1e5 && !l.rateMode ? 'Rs. ' + groupIN(l.price) : '', isRent(l) && l.deposit > 0 ? 'Deposit ' + fmtNPR(l.deposit) : ''].filter(Boolean).join(' · ');
+  const feats = featuresOf(l);
   let h = '<div class="dlg-head"><div><div class="card-top">' + badges(l) + '</div><h2>' + esc(l.title) + '</h2></div>' +
     '<button class="x" type="button" data-close aria-label="Close">&times;</button></div>';
   h += '<div class="gal"><div class="gal-main' + (photos.length ? '' : ' empty') + '" style="--c:' + cvar(cat) + '" id="galMain">' + (photos.length ? '<img src="' + esc(photos[0]) + '" alt="Photo 1 of ' + esc(l.title) + '">' : catIcon(cat)) + '</div>';
   if (photos.length > 1) h += '<div class="gal-thumbs">' + photos.map((p, i) => '<button type="button" data-ph="' + i + '" aria-pressed="' + (i === 0) + '" aria-label="Photo ' + (i + 1) + '"><img src="' + esc(p) + '" alt="" loading="lazy"></button>').join('') + '</div>';
   h += '</div>';
-  h += '<div><div class="price-big">' + esc(priceText(l)) + '</div>' + (sub ? '<p class="hint mono">' + esc(sub) + '</p>' : '') + '</div>';
-  h += '<dl class="facts">' + facts.map(f => '<div><dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1]) + '</dd></div>').join('') + '</dl>';
-  if (l.desc) h += '<p class="desc">' + esc(l.desc) + '</p>';
-  h += '<div class="row detail-actions"><button class="btn primary" type="button" data-talk>Talk to me about this</button>' +
+  if (l.social) h += '<a class="btn postbtn" href="' + esc(l.social) + '" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>View video / post' + (postSite(l.social) ? ' on ' + postSite(l.social) : '') + '</a>';
+  h += '<div><div class="price-big">' + esc(priceText(l)) + '</div>' + (sub ? '<p class="hint mono">' + esc(sub) + '</p>' : '') +
+    (placeLine(l) ? '<p class="where">' + esc(placeLine(l)) + '</p>' : '') + '</div>';
+  h += '<div class="row detail-actions"><button class="btn primary" type="button" data-talk>Contact</button>' +
     '<a class="btn" href="https://www.google.com/maps/dir/?api=1&amp;destination=' + (+l.lat).toFixed(6) + ',' + (+l.lng).toFixed(6) + '" target="_blank" rel="noopener noreferrer">Get directions</a>' +
-    '<button class="btn" type="button" data-showmap>Show on this map</button>' +
-    '<button class="btn" type="button" data-share>Copy link</button></div>';
+    '<button class="btn" type="button" data-share>Share link</button></div>';
+  h += '<dl class="facts">' + detailFacts(l).map(f => '<div><dt>' + esc(f[0]) + '</dt><dd>' + esc(f[1]) + '</dd></div>').join('') + '</dl>';
+  if (feats.length) h += '<div class="feats"><span class="feats-h">It has</span><span class="cfacts">' + feats.map(f => '<span>' + esc(f) + '</span>').join('') + '</span></div>';
+  if (l.desc) h += '<p class="desc">' + esc(l.desc) + '</p>';
+  h += '<div class="field"><span>Where it is</span><div id="detailMap" class="mapbox dmap"></div></div>' +
+    '<div class="row"><button class="btn small" type="button" data-showmap>Show on the big map</button></div>';
   if (owner) h += '<div class="row owner-row"><button class="btn small" type="button" data-edit>Edit</button>' +
-    '<button class="btn small" type="button" data-sold>' + (l.status === 'sold' ? 'Mark as available' : isRent(l) ? 'Mark as rented out' : 'Mark as sold') + '</button>' +
-    '<button class="btn small danger" type="button" data-del>Delete listing</button>' +
-    '<span class="row" data-confirm hidden><strong>Delete this listing?</strong><button class="btn small danger" type="button" data-del-yes>Yes, delete</button><button class="btn small" type="button" data-del-no>Keep it</button></span></div>' +
+    '<label class="inline"><span class="sr">Status</span><select data-status>' + statusOptions(l) + '</select></label>' +
+    '<button class="btn small danger" type="button" data-del>Delete</button></div>' +
     '<p class="err" role="alert" data-err hidden></p>';
   const box = $('#detailBody');
   box.innerHTML = h;
   box.dataset.id = id;
   box._photos = photos;
-  setHash(id);
-  if (!dlgDetail.open) dlgDetail.showModal();
+  setUrl(id);
+  setTitle(l);
+  show(dlgDetail);
+  dlgDetail.scrollTop = 0;
+  try {
+    detailMap = L.map('detailMap', { zoomControl: true, scrollWheelZoom: false, dragging: !L.Browser.mobile, minZoom: 11, maxBounds: L.latLngBounds(AREA).pad(0.12) });
+    detailMap.attributionControl.setPrefix(false);
+    baseLayer().addTo(detailMap);
+    detailMap.setView([l.lat, l.lng], 16);
+    L.marker([l.lat, l.lng], { icon: pinIcon(l, 'sel'), interactive: false, keyboard: false }).addTo(detailMap);
+    const dm = detailMap;
+    setTimeout(() => { if (detailMap === dm) dm.invalidateSize(); }, 80);
+  } catch (e) { console.error(e); }
 }
-dlgDetail.addEventListener('close', () => setHash(''));
-$('#detailBody').addEventListener('click', async e => {
+dlgDetail.addEventListener('close', () => { dropDetailMap(); setUrl(''); setTitle(); });
+async function setStatus(id, next, errEl) {
+  const l = byId(id);
+  if (!l || STATUSES.indexOf(next) < 0 || l.status === next) return false;
+  return mutate(errEl, async () => {
+    const r = await sb.from('listings').update({ status: next, updated_at: new Date().toISOString() }).eq('id', id).select('id');
+    if (r.error) throw r.error;
+    if (Array.isArray(r.data) && !r.data.length) throw { code: '42501', message: 'not allowed' };
+    l.status = next;
+  }, next === 'unavailable' ? 'Hidden from visitors. It is still in Manage listings.' : 'Marked as ' + STATUS_WORD[next].toLowerCase() + '.');
+}
+$('#detailBody').addEventListener('click', e => {
   const box = $('#detailBody'), id = box.dataset.id, l = byId(id);
   const t = e.target;
   const ph = t.closest('[data-ph]');
@@ -665,31 +964,17 @@ $('#detailBody').addEventListener('click', async e => {
     return;
   }
   if (!l) return;
-  const errEl = box.querySelector('[data-err]');
   if (t.closest('[data-talk]')) openContact(id);
-  else if (t.closest('[data-share]')) copyText(listingUrl(id), t.closest('[data-share]'));
-  else if (t.closest('[data-showmap]')) { dlgDetail.close(); showOnMap(id); }
+  else if (t.closest('[data-share]')) shareLink(l, t.closest('[data-share]'));
+  else if (t.closest('[data-showmap]')) { dlgDetail.close(); if (dlgManage.open) dlgManage.close(); showOnMap(id); }
   else if (t.closest('[data-edit]')) { dlgDetail.close(); openEdit(id); }
-  else if (t.closest('[data-sold]')) {
-    const next = l.status === 'sold' ? 'available' : 'sold';
-    const ok = await mutate(errEl, async () => {
-      const r = await sb.from('listings').update({ status: next, updated_at: new Date().toISOString() }).eq('id', id);
-      if (r.error) throw r.error;
-      l.status = next;
-    }, next === 'sold' ? 'Marked as ' + soldWord(l).toLowerCase() + '.' : 'Marked as available.');
-    if (ok) dlgDetail.close();
-  }
-  else if (t.closest('[data-del]')) { box.querySelector('[data-confirm]').hidden = false; }
-  else if (t.closest('[data-del-no]')) { box.querySelector('[data-confirm]').hidden = true; }
-  else if (t.closest('[data-del-yes]')) {
-    const ok = await mutate(errEl, async () => {
-      const r = await sb.from('listings').delete().eq('id', id);
-      if (r.error) throw r.error;
-      removePhotos(l.photos);
-      state.listings = state.listings.filter(x => x.id !== id);
-    }, 'Listing deleted.');
-    if (ok) dlgDetail.close();
-  }
+  else if (t.closest('[data-del]')) askDelete(id);
+});
+$('#detailBody').addEventListener('change', async e => {
+  const s = e.target.closest('[data-status]'); if (!s) return;
+  const box = $('#detailBody'), id = box.dataset.id;
+  const ok = await setStatus(id, s.value, box.querySelector('[data-err]'));
+  if (ok && dlgDetail.open && byId(id)) openDetail(id); else if (!ok && byId(id)) s.value = byId(id).status;
 });
 
 /* ---------- contact ---------- */
@@ -698,11 +983,16 @@ function copyText(text, btn) {
   try { navigator.clipboard.writeText(text).then(done, () => toast('Press and hold the text to copy it.')); }
   catch (e) { toast('Press and hold the text to copy it.'); }
 }
+function shareLink(l, btn) {
+  const url = listingUrl(l.id);
+  if (navigator.share) { navigator.share({ title: l.title, text: l.title + ', ' + priceText(l).replace(/ /g, ' '), url: url }).catch(() => {}); return; }
+  copyText(url, btn);
+}
 function openContact(id) {
   const l = id ? byId(id) : null, s = state.site;
-  const msg = l ? 'Hello, I saw "' + l.title + '" (' + priceText(l) + ') on ' + (s.name || DEF_SITE.name) + '. Is it still available? Please send me the details. ' + listingUrl(l.id)
+  const msg = l ? 'Hello, I saw "' + l.title + '" (' + priceText(l).replace(/ /g, ' ') + ') on ' + (s.name || DEF_SITE.name) + '. Is it still available? Please send me the details. ' + listingUrl(l.id)
     : 'Hello, I am looking at ' + (s.name || DEF_SITE.name) + ' and would like to know more.';
-  $('#contactH').textContent = s.owner ? 'Talk to ' + s.owner : 'Talk to me';
+  $('#contactH').textContent = s.owner ? 'Contact ' + s.owner : 'Contact';
   const links = [];
   const wa = waUrl(s.whatsapp, msg);
   if (wa) links.push([wa, 'Message on WhatsApp', true]);
@@ -715,7 +1005,7 @@ function openContact(id) {
     h += '<p>Contact details are not added yet.</p>';
     if (owner) h += '<div class="row"><button class="btn primary" type="button" data-site>Add my phone and social links</button></div>';
   } else {
-    h += '<p class="hint">Full details, papers and site visits are arranged directly with me.</p>';
+    h += '<p class="hint">Full details, papers and site visits are arranged directly with the owner.</p>';
     if (s.phone) h += '<div class="field"><span>Call or text</span><div class="row"><span class="phone" id="phoneText">' + esc(s.phone) + '</span>' +
       (tel.length >= 7 ? '<a class="btn small primary" href="tel:' + esc(tel) + '">Call</a>' : '') + '<button class="btn small" type="button" data-copy="phone">Copy number</button></div></div>';
     if (links.length) h += '<div class="row">' + links.map(a => '<a class="btn' + (a[2] ? ' primary' : '') + '" href="' + esc(a[0]) + '" target="_blank" rel="noopener noreferrer">' + a[1] + '</a>').join('') + '</div>';
@@ -724,7 +1014,7 @@ function openContact(id) {
   }
   $('#contactBody').innerHTML = h;
   const ta = $('#msgText'); if (ta) ta.value = msg;
-  if (!dlgContact.open) dlgContact.showModal();
+  show(dlgContact);
 }
 $('#contactBody').addEventListener('click', e => {
   const c = e.target.closest('[data-copy]');
@@ -736,14 +1026,16 @@ $('#talkBtn').addEventListener('click', () => openContact(null));
 /* ---------- saving to the database ---------- */
 function setBusy(on) {
   busy = on;
-  ['#f_save', '#s_save', '#c_save', '#l_save', '#addBtn', '#siteBtn', '#catBtn'].forEach(s => { const b = $(s); if (b) b.disabled = on; });
+  ['#f_save', '#s_save', '#c_save', '#l_save', '#addBtn', '#siteBtn', '#catBtn', '#manageBtn', '#m_add', '#confirmYes'].forEach(s => { const b = $(s); if (b) b.disabled = on; });
   $('#f_save').textContent = on ? 'Saving…' : ($('#f_save').dataset.label || 'Save property');
   $('#s_save').textContent = on ? 'Saving…' : 'Save details';
 }
+const DB_OLD = 'The database needs its update first. In Supabase open SQL Editor, run database-update.sql, then try again.';
 function errText(e) {
-  const m = String(e && (e.message || e.error_description || e.error) || '');
-  if ((e && (e.code === '42501' || e.status === 401 || e.status === 403 || e.statusCode === '403')) || /row-level security|permission denied|not authorized|jwt/i.test(m)) return 'This account is not allowed to edit. Sign in again as the owner.';
-  if (/payload too large|exceeded the maximum|too large/i.test(m)) return 'A photo is too large to upload. Remove it and try a smaller one.';
+  const m = String(e && (e.message || e.error_description || e.error) || ''), code = e && e.code;
+  if (code === 'PGRST204' || code === '42703' || code === '23514' || code === '23503' || /schema cache|column .* does not exist|violates check constraint|foreign key/i.test(m)) return DB_OLD;
+  if ((e && (code === '42501' || e.status === 401 || e.status === 403 || e.statusCode === '403')) || /row-level security|permission denied|not authorized|not allowed|jwt/i.test(m)) return 'This account is not allowed to change listings. Sign in again as the owner.';
+  if (/payload too large|exceeded the maximum|too large|mime type/i.test(m)) return 'A photo could not be uploaded. Remove it and try another one.';
   if (/failed to fetch|network/i.test(m)) return 'No connection. Check the internet and try again.';
   return 'Could not save. Try again in a moment.';
 }
@@ -764,10 +1056,37 @@ async function mutate(errEl, work, okMsg) {
   } finally { setBusy(false); }
 }
 function photoPath(url) { const i = String(url).indexOf('/object/public/photos/'); return i < 0 ? '' : decodeURIComponent(String(url).slice(i + 22).split('?')[0]); }
+// Deletes photo files from storage. Only ever called with photos that no saved listing uses any more.
 function removePhotos(urls) {
   const paths = (urls || []).map(photoPath).filter(Boolean);
   if (paths.length) sb.storage.from('photos').remove(paths).then(() => {}, () => {});
 }
+
+/* ---------- delete a listing ---------- */
+let delId = null;
+function askDelete(id) {
+  const l = byId(id); if (!l || !owner) return;
+  delId = id;
+  $('#confirmTitle').textContent = l.title;
+  $('#confirmErr').hidden = true;
+  show(dlgConfirm);
+  $('#confirmNo').focus();
+}
+$('#confirmNo').addEventListener('click', () => dlgConfirm.close());
+$('#confirmYes').addEventListener('click', async () => {
+  const id = delId, l = byId(id);
+  if (!l) { dlgConfirm.close(); return; }
+  // The database decides whether this account may delete (see the rules in supabase/schema.sql).
+  const ok = await mutate($('#confirmErr'), async () => {
+    const r = await sb.from('listings').delete().eq('id', id).select('id');
+    if (r.error) throw r.error;
+    if (Array.isArray(r.data) && !r.data.length) throw { code: '42501', message: 'not allowed' };
+    removePhotos(l.photos);
+    state.listings = state.listings.filter(x => x.id !== id);
+    if (selectedId === id) selectedId = null;
+  }, 'Listing deleted.');
+  if (ok) { dlgConfirm.close(); if (dlgDetail.open && $('#detailBody').dataset.id === id) dlgDetail.close(); }
+});
 
 /* ---------- owner sign in ---------- */
 function setOwner(on) {
@@ -784,11 +1103,16 @@ async function checkOwner() {
     if (!s.data || !s.data.session) { setOwner(false); return 'out'; }
     const r = await sb.rpc('is_admin');
     if (r.error) throw r.error;
+    if (r.data === true) {
+      // The owner also gets the listings hidden from visitors, and a warning if the database is not updated yet.
+      try { await loadAll(); } catch (e) {}
+      sb.from('listings').select('deal_type,details').limit(1).then(p => { $('#dbNote').hidden = !p.error; }, () => {});
+    }
     setOwner(r.data === true);
     return r.data === true ? 'owner' : 'not_owner';
   } catch (e) { setOwner(false); return 'error'; }
 }
-const openLogin = () => { $('#l_err').hidden = true; $('#l_pass').value = ''; dlgLogin.showModal(); };
+const openLogin = () => { $('#l_err').hidden = true; $('#l_pass').value = ''; show(dlgLogin); };
 $('#loginLink').addEventListener('click', openLogin);
 $('#loginBtn').addEventListener('click', openLogin);
 $('#loginForm').addEventListener('submit', async e => {
@@ -802,17 +1126,59 @@ $('#loginForm').addEventListener('submit', async e => {
     const r = await sb.auth.signInWithPassword({ email: email, password: pass });
     if (r.error) return bad(/invalid/i.test(r.error.message || '') ? 'The email or password is not right.' : 'Could not sign in. Check your connection and try again.');
     const who = await checkOwner();
-    if (who === 'owner') { dlgLogin.close(); toast('Signed in. Owner tools are at the bottom.'); }
-    else { await sb.auth.signOut(); bad(who === 'not_owner' ? 'This account is not set as the site owner yet. Run setup-all.sql in Supabase, then sign in again.' : 'Signed in, but the owner check failed. Run setup-all.sql in Supabase first.'); }
+    if (who === 'owner') { dlgLogin.close(); renderAll(); toast('Signed in. Owner tools are at the bottom.'); }
+    else { await sb.auth.signOut(); bad(who === 'not_owner' ? 'This account is not set as the site owner yet. Run database-update.sql in Supabase, then sign in again.' : 'Signed in, but the owner check failed. Run database-update.sql in Supabase first.'); }
   } catch (e2) { bad('Could not sign in. Check your connection and try again.'); }
   finally { setBusy(false); }
 });
-$('#signOutBtn').addEventListener('click', async () => { try { await sb.auth.signOut(); } catch (e) {} setOwner(false); toast('Signed out.'); });
+$('#signOutBtn').addEventListener('click', async () => {
+  try { await sb.auth.signOut(); } catch (e) {}
+  state.listings = state.listings.filter(l => l.status !== 'unavailable');
+  setOwner(false); toast('Signed out.');
+});
 $('#addBtn').addEventListener('click', () => openEdit(null));
 $('#siteBtn').addEventListener('click', openSite);
 
+/* ---------- manage listings ---------- */
+let mTab = 'all';
+function renderManage() {
+  const all = state.listings;
+  const n = { all: all.length, available: 0, sold: 0, rented: 0, unavailable: 0 };
+  all.forEach(l => { n[l.status]++; });
+  $('#mTabs').innerHTML = [['all', 'All']].concat(STATUSES.map(s => [s, STATUS_WORD[s]])).map(([k, label]) =>
+    '<button class="chip" type="button" data-tab="' + k + '" aria-pressed="' + (mTab === k) + '">' + label + '<b>' + n[k] + '</b></button>').join('');
+  const arr = all.filter(l => mTab === 'all' || l.status === mTab);
+  $('#mList').innerHTML = arr.length ? arr.map(l => {
+    const ph = (l.photos || []).find(okUrl), c = catOf(l.type);
+    return '<li class="mrow" data-id="' + esc(l.id) + '">' +
+      '<span class="thumb" style="--c:' + cvar(c) + '">' + (ph ? '<img src="' + esc(ph) + '" alt="" loading="lazy">' : catIcon(c)) + '</span>' +
+      '<div class="mbody"><span class="card-top">' + badges(l) + '</span><strong>' + esc(l.title) + '</strong>' +
+      '<span class="mprice">' + esc(priceText(l)) + '</span>' + (placeLine(l) ? '<span class="hint">' + esc(placeLine(l)) + '</span>' : '') + '</div>' +
+      '<div class="mact"><button class="btn small" type="button" data-view>View</button><button class="btn small" type="button" data-edit>Edit</button>' +
+      '<label class="inline"><span class="sr">Change status of ' + esc(l.title) + '</span><select data-status>' + statusOptions(l) + '</select></label>' +
+      '<button class="btn small danger" type="button" data-del>Delete</button></div></li>';
+  }).join('') : '<li class="empty">' + (all.length ? 'No listings with this status.' : 'No listings yet. Press “+ Add property”.') + '</li>';
+}
+$('#manageBtn').addEventListener('click', () => { $('#m_err').hidden = true; renderManage(); show(dlgManage); });
+$('#m_add').addEventListener('click', () => openEdit(null));
+$('#mTabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (!b) return; mTab = b.dataset.tab; renderManage(); });
+$('#mList').addEventListener('click', e => {
+  const li = e.target.closest('.mrow'); if (!li) return;
+  const id = li.dataset.id;
+  if (e.target.closest('[data-view]')) openDetail(id);
+  else if (e.target.closest('[data-edit]')) openEdit(id);
+  else if (e.target.closest('[data-del]')) askDelete(id);
+});
+$('#mList').addEventListener('change', async e => {
+  const s = e.target.closest('[data-status]'); if (!s) return;
+  const id = s.closest('.mrow').dataset.id;
+  const ok = await setStatus(id, s.value, $('#m_err'));
+  if (!ok) renderManage();
+});
+
 /* ---------- add or edit a property ---------- */
 let draft = null, mini = null, miniMark = null;
+const PHOTO_NOTE = 'You can pick several at once. The first photo is the cover. Photos are made smaller automatically so the site stays fast.';
 function ensureMini() {
   if (mini) return;
   mini = L.map('miniMap', { minZoom: 9, maxBounds: L.latLngBounds(AREA).pad(0.12), maxBoundsViscosity: 1 });
@@ -835,9 +1201,7 @@ function setDraftSpot(lat, lng, fromInput, move) {
     return;
   }
   err.hidden = true;
-  const D = districtAt(lng, lat);
-  draft.lat = +lat.toFixed(6); draft.lng = +lng.toFixed(6); draft.district = D ? D.name : '';
-  $('#f_district').textContent = D ? D.name + ', ' + D.prov + ' Province' : 'Not placed yet';
+  draft.lat = +lat.toFixed(6); draft.lng = +lng.toFixed(6);
   if (!fromInput) $('#f_coords').value = draft.lat.toFixed(5) + ', ' + draft.lng.toFixed(5);
   setMiniMark(draft.lat, draft.lng);
   if (move) mini.setView([draft.lat, draft.lng], Math.max(mini.getZoom(), 17));
@@ -850,8 +1214,14 @@ function parseCoords(str) {
   const lat = parseFloat(m[1]), lng = parseFloat(m[2]);
   return isFinite(lat) && isFinite(lng) ? { lat, lng } : null;
 }
+// Photo tiles: move earlier, move later, remove. Photos already saved stay exactly as they are until Save is pressed.
 function renderDraftPhotos() {
-  $('#f_photoList').innerHTML = draft.photos.map((p, i) => '<div class="ph"><img src="' + esc(p.url || p.preview) + '" alt="Photo ' + (i + 1) + '"><button type="button" data-rm="' + i + '" aria-label="Remove photo ' + (i + 1) + '">&times;</button></div>').join('');
+  const n = draft.photos.length;
+  $('#f_photoList').innerHTML = draft.photos.map((p, i) => '<div class="ph"><img src="' + esc(p.url || p.preview) + '" alt="Photo ' + (i + 1) + '">' + (i === 0 ? '<span class="cover">Cover</span>' : '') +
+    '<div class="ph-bar"><button type="button" data-mv="-1" data-i="' + i + '" aria-label="Move photo ' + (i + 1) + ' earlier"' + (i === 0 ? ' disabled' : '') + '>&larr;</button>' +
+    '<button type="button" data-mv="1" data-i="' + i + '" aria-label="Move photo ' + (i + 1) + ' later"' + (i === n - 1 ? ' disabled' : '') + '>&rarr;</button>' +
+    '<button type="button" data-rm="' + i + '" aria-label="Remove photo ' + (i + 1) + '">&times;</button></div></div>').join('');
+  $('#f_photoNote').textContent = n ? n + ' of 10 photos. ' + (n > 1 ? 'Use the arrows to change the order. ' : '') + 'The first photo is the cover.' : PHOTO_NOTE;
 }
 function fileToBlob(file) {
   return new Promise((res, rej) => {
@@ -872,70 +1242,145 @@ function fileToBlob(file) {
     img.src = url;
   });
 }
+const formKind = () => draft && draft.type ? kindOf(catOf(draft.type)) : '';
+function fieldHtml(k, K) {
+  const f = FIELDS[k], id = 'x_' + k, v = draft.d[k], label = esc(labelOf(k, K)) + (f.opt ? ' (optional)' : '');
+  if (f.t === 'bool') return '<label class="tick" for="' + id + '"><input type="checkbox" id="' + id + '" data-k="' + k + '"' + (v === true ? ' checked' : '') + '><span>' + label + '</span></label>';
+  if (f.t === 'sel') {
+    const opts = optsOf(k, K).map(o => Array.isArray(o) ? o : [o, o]);
+    if (v != null && v !== '' && !opts.some(o => o[0] === String(v))) opts.push([String(v), String(v)]);
+    return '<label class="field" for="' + id + '"><span>' + label + '</span><select id="' + id + '" data-k="' + k + '"><option value="">Not set</option>' +
+      opts.map(o => '<option value="' + esc(o[0]) + '"' + (v != null && String(v) === o[0] ? ' selected' : '') + '>' + esc(o[1]) + '</option>').join('') + '</select></label>';
+  }
+  const input = '<input type="text" id="' + id + '" data-k="' + k + '" value="' + esc(v == null ? '' : v) + '"' + (f.t === 'text' ? ' maxlength="' + (f.max || 60) + '"' : ' inputmode="' + (f.t === 'int' ? 'numeric' : 'decimal') + '"') +
+    (f.ph ? ' placeholder="' + esc(f.ph) + '"' : '') + ' autocomplete="off">';
+  return '<label class="field' + (f.t === 'text' ? ' wide' : '') + '" for="' + id + '"><span>' + label + (f.year ? ' (BS or AD)' : '') + '</span>' + (f.unit ? '<span class="unitbox">' + input + '<em>' + f.unit + '</em></span>' : input) + '</label>';
+}
+// Builds the questions for the chosen category and deal. Answers already typed are kept in draft.d.
+function renderDyn(K, rent) {
+  $('#f_dyn').innerHTML = K.groups.map(g => {
+    const keys = g[1].filter(k => rent || !(K.rentOnly && K.rentOnly.indexOf(k) >= 0));
+    if (!keys.length) return '';
+    const inputs = keys.filter(k => FIELDS[k].t !== 'bool'), ticks = keys.filter(k => FIELDS[k].t === 'bool');
+    return '<h3 class="sect">' + esc(g[0]) + '</h3>' +
+      (inputs.length ? '<div class="grid2">' + inputs.map(k => fieldHtml(k, K)).join('') + '</div>' : '') +
+      (ticks.length ? '<div class="ticks">' + ticks.map(k => fieldHtml(k, K)).join('') + '</div>' : '');
+  }).join('');
+}
+function placeMini() {
+  if (!mini || $('#f_body').hidden) return;
+  mini.invalidateSize();
+  lockZoom(mini);
+  if (draft._placed) return;
+  draft._placed = true;
+  if (draft.lat != null && draft.lng != null) { mini.setView([draft.lat, draft.lng], 17); setMiniMark(draft.lat, draft.lng); }
+  else { const c = map.getCenter(); if (map.getZoom() >= 13) mini.setView(c, map.getZoom()); else mini.fitBounds(AREA); }
+}
+// Shows the right questions for the chosen category and deal, and hides everything else.
+function applyKind() {
+  const kind = formKind(), K = KINDS[kind];
+  if (K && K.deals.indexOf(draft.deal) < 0) draft.deal = K.deals.length === 1 ? K.deals[0] : null;
+  $('#f_dealBox').hidden = !K;
+  $('#f_deals').innerHTML = K ? ['sale', 'rent'].filter(d => K.deals.indexOf(d) >= 0).map(d =>
+    '<label><input type="radio" name="f_deal" id="f_deal_' + d + '" value="' + d + '"' + (draft.deal === d ? ' checked' : '') + '><span>' + (d === 'sale' ? 'For sale' : 'For rent') + '</span></label>').join('') : '';
+  const ready = !!(K && draft.deal);
+  $('#f_body').hidden = !ready;
+  $('#f_stepHint').hidden = ready;
+  $('#f_stepHint').textContent = K ? 'Choose For sale or For rent.' : 'Choose what it is. The form then shows only the questions for that kind of property.';
+  if (!ready) return;
+  const rent = draft.deal === 'rent';
+  $('#f_subBox').hidden = !K.sub;
+  if (K.sub) {
+    $('#f_subLabel').textContent = K.sub[0];
+    const cur = K.sub[1].indexOf(draft.sub) >= 0 ? draft.sub : '';
+    $('#f_sub').innerHTML = '<option value="">Choose</option>' + K.sub[1].map(o => '<option' + (o === cur ? ' selected' : '') + '>' + esc(o) + '</option>').join('');
+  }
+  // Size units depend on the category: land units for land, only sq ft and sq m for a flat, shutter or room.
+  const unitSel = $('#f_unit'), was = unitSel.value || draft.area.u;
+  unitSel.innerHTML = K.units.map(u => '<option value="' + u + '">' + UNITS[u][0] + '</option>').join('');
+  if (K.units.indexOf(was) >= 0) unitSel.value = was;
+  else if (draft.id && draft.keepUnit === was && draft.keepType === draft.type && kind !== 'flat') {
+    // A listing saved before this update may use a unit this form no longer offers. It is kept so nothing is lost.
+    unitSel.insertAdjacentHTML('beforeend', '<option value="' + was + '">' + UNITS[was][0] + '</option>');
+    unitSel.value = was;
+  } else { unitSel.value = K.unit; $('#f_area').value = ''; }
+  $('#f_sizeLabel').textContent = K.size + (K.sizeOpt ? ' (optional)' : '');
+  $('#f_area').placeholder = K.sizePh || '';
+  $('#f_builtBox').hidden = !K.built;
+  $('#f_depositBox').hidden = !rent;
+  const per = !!K.perUnit && !rent;
+  if (!per) $('#f_pmode').value = 'total';
+  $('#f_pmode').hidden = !per;
+  $('#f_pricePair').classList.toggle('one', !per);
+  $('#f_title').placeholder = 'For example: ' + K.titlePh;
+  const st = $('#f_status'), sv = st.value || draft.status;
+  st.innerHTML = [['available', 'Available'], rent ? ['rented', 'Rented'] : ['sold', 'Sold'], ['unavailable', 'Unavailable (hidden from visitors)']].map(o => '<option value="' + o[0] + '">' + o[1] + '</option>').join('');
+  st.value = sv === 'sold' || sv === 'rented' ? (rent ? 'rented' : 'sold') : sv === 'unavailable' ? sv : 'available';
+  renderDyn(K, rent);
+  readPrice();
+  setTimeout(placeMini, 60);
+}
 function openEdit(id) {
   const l = id ? byId(id) : null;
-  draft = l ? JSON.parse(JSON.stringify(l)) : { id: null, type: state.cats.some(c => c.id === 'land') ? 'land' : state.cats[0].id, title: '', price: 0, area: { v: 0, u: 'aana' }, place: '', district: '', lat: null, lng: null, desc: '', photos: [], status: 'available' };
+  draft = l ? JSON.parse(JSON.stringify(l)) : { id: null, type: null, deal: null, sub: '', title: '', price: 0, rateMode: false, area: { v: 0, u: 'aana' }, built: { v: 0, u: 'sqft' }, deposit: 0, social: '', d: {}, place: '', district: DISTRICT, lat: null, lng: null, desc: '', photos: [], status: 'available' };
   draft.photos = (draft.photos || []).filter(okUrl).map(u => ({ url: u }));
+  draft.keepType = draft.type; draft.keepUnit = l && l.area.v > 0 && UNITS[l.area.u] ? l.area.u : '';
   $('#editH').textContent = l ? 'Edit property' : 'Add property';
   $('#f_save').dataset.label = l ? 'Update property' : 'Save property';
   $('#f_save').textContent = $('#f_save').dataset.label;
-  $('#f_types').innerHTML = state.cats.map((c, i) => '<label><input type="radio" name="f_type" id="f_type_' + i + '" value="' + esc(c.id) + '"' + (c.id === draft.type ? ' checked' : '') + '><span>' + esc(c.label) + '</span></label>').join('');
-  if (!$('input[name="f_type"]:checked')) { const first = $('input[name="f_type"]'); if (first) first.checked = true; }
-  $('#f_title').value = draft.title || '';
+  $('#f_types').innerHTML = state.cats.map((c, i) => '<label><input type="radio" name="f_type" id="f_type_' + i + '" value="' + esc(c.id) + '"' + (c.id === draft.type ? ' checked' : '') + '><span>' + esc(catName(c)) + '</span></label>').join('');
+  $('#f_title').value = l ? draft.title || '' : '';
+  $('#f_unit').innerHTML = '';
   $('#f_area').value = draft.area && draft.area.v > 0 ? trimNum(draft.area.v) : '';
-  $('#f_unit').value = draft.area && UNITS[draft.area.u] ? draft.area.u : 'aana';
-  const perMode = !!draft.rateMode && !isRent(draft) && draft.area && draft.area.v > 0 && draft.price > 0;
-  $('#f_pmode').value = perMode ? 'unit' : 'total';
-  $('#f_price').value = draft.price > 0 ? String(perMode ? Math.round(draft.price / draft.area.v) : draft.price) : '';
+  const rate = l && draft.rateMode ? rateOf(l) : null;
+  $('#f_pmode').value = rate ? 'unit' : 'total';
+  $('#f_price').value = draft.price > 0 ? String(rate ? Math.round(rate.v) : draft.price) : '';
+  $('#f_built').value = draft.built && draft.built.v > 0 ? trimNum(draft.built.v) : '';
+  $('#f_builtUnit').value = draft.built && draft.built.u === 'sqm' ? 'sqm' : 'sqft';
+  $('#f_deposit').value = draft.deposit > 0 ? String(draft.deposit) : '';
   $('#f_place').value = draft.place || '';
+  $('#f_district').textContent = DISTRICT;
   $('#f_desc').value = draft.desc || '';
-  $('#f_sold').checked = draft.status === 'sold';
+  $('#f_social').value = draft.social || '';
+  $('#f_status').innerHTML = '';
   $('#f_photos').value = '';
   $('#f_err').hidden = true;
-  $('#f_photoNote').textContent = 'Photos are made smaller automatically so the site stays fast.';
+  $('#f_coords').value = draft.lat != null && draft.lng != null ? (+draft.lat).toFixed(5) + ', ' + (+draft.lng).toFixed(5) : '';
   $('#placeList').innerHTML = Array.from(new Set(state.listings.map(placeName))).sort().map(n => '<option value="' + esc(n) + '"></option>').join('');
-  readPrice();
   renderDraftPhotos();
-  dlgEdit.showModal();
+  show(dlgEdit);
   ensureMini();
   setMiniMark(null);
-  if (draft.lat != null && draft.lng != null) {
-    const D = districtByName(draft.district);
-    $('#f_district').textContent = draft.district ? draft.district + (D ? ', ' + D.prov + ' Province' : '') : 'Not placed yet';
-    $('#f_coords').value = (+draft.lat).toFixed(5) + ', ' + (+draft.lng).toFixed(5);
-  } else {
-    $('#f_district').textContent = 'Not placed yet';
-    $('#f_coords').value = '';
-  }
-  setTimeout(() => {
-    mini.invalidateSize();
-    lockZoom(mini);
-    if (draft.lat != null && draft.lng != null) { mini.setView([draft.lat, draft.lng], 17); setMiniMark(draft.lat, draft.lng); }
-    else { const c = map.getCenter(); if (map.getZoom() >= 13) mini.setView(c, map.getZoom()); else mini.fitBounds(AREA); }
-  }, 60);
+  applyKind();
   dlgEdit.scrollTop = 0;
 }
-function formCat() { const el = $('input[name="f_type"]:checked'); return catOf(el ? el.value : 'land'); }
 function readPrice() {
-  const rent = formCat().deal === 'rent';
-  const unit = UNITS[$('#f_unit').value] ? $('#f_unit').value : 'aana';
-  $('#f_priceLabel').textContent = rent ? 'Rent per month (Rs.)' : 'Price (Rs.)';
-  $('#f_pmode').hidden = rent;
-  $('#f_pmode').options[1].textContent = 'per ' + UNITS[unit][0];
-  $('#f_soldLabel').textContent = rent ? 'Already rented out' : 'Already sold';
+  const K = KINDS[formKind()]; if (!K || !draft.deal) return;
+  const rent = draft.deal === 'rent';
+  const unit = UNITS[$('#f_unit').value] ? $('#f_unit').value : K.unit;
+  const ru = rateUnit(unit);
+  $('#f_priceLabel').textContent = rent ? 'Monthly rent (Rs.)' : K.perUnit ? 'Price (Rs.)' : 'Total price (Rs.)';
+  $('#f_price').placeholder = rent ? '35000' : '65 lakh, 1.35 crore or 6500000';
+  $('#f_pmode').options[1].textContent = 'per ' + UNITS[ru][0];
   const v = $('#f_price').value.trim(), out = $('#f_priceRead');
   if (!v) { out.textContent = 'Leave the price empty to show “Price on request”.'; return; }
   const p = parseMoney(v, rent);
-  if (!p) { out.textContent = rent ? 'Type the rent as a number, for example 18000.' : 'Type the price as a number, for example 45 lakh or 6500000.'; return; }
-  if (rent) { out.textContent = 'Rent will show as ' + fmtNPR(p.value) + ' a month.'; return; }
+  if (!p) { out.textContent = rent ? 'Type the rent as a number, for example 35000.' : 'Type the price as a number, for example 65 lakh or 6500000.'; return; }
+  if (rent) { out.textContent = 'Shows as ' + fmtNPR(p.value) + '/month.'; return; }
   if ($('#f_pmode').value === 'unit') {
-    const av = parseFloat($('#f_area').value);
-    out.textContent = av > 0 ? 'Total price works out to ' + fmtNPR(p.value * av) + ' (' + trimNum(av) + ' ' + UNITS[unit][0] + ' at ' + fmtNPR(p.value) + ' each).' : 'Add the size so the total price can be worked out.';
+    const av = parseFloat($('#f_area').value), n = av * UNITS[unit][1] / UNITS[ru][1];
+    out.textContent = av > 0 ? 'Shows as ' + fmtNPR(p.value) + ' per ' + UNITS[ru][0] + '. Total works out to ' + fmtNPR(p.value * n) + ' for ' + trimNum(av) + ' ' + UNITS[unit][0] + '.' : 'Add the land size so the total price can be worked out.';
     return;
   }
-  out.textContent = 'Price will show as ' + fmtNPR(p.value) + ' (Rs. ' + groupIN(p.value) + ').';
+  out.textContent = 'Shows as ' + fmtNPR(p.value) + ' (Rs. ' + groupIN(p.value) + ').';
 }
-['#f_price', '#f_area', '#f_unit', '#f_pmode', '#f_types'].forEach(s => { $(s).addEventListener('input', readPrice); $(s).addEventListener('change', readPrice); });
+['#f_price', '#f_area', '#f_unit', '#f_pmode'].forEach(s => { $(s).addEventListener('input', readPrice); $(s).addEventListener('change', readPrice); });
+$('#f_types').addEventListener('change', e => { if (e.target.name === 'f_type') { draft.type = e.target.value; applyKind(); } });
+$('#f_deals').addEventListener('change', e => { if (e.target.name === 'f_deal') { draft.deal = e.target.value; applyKind(); } });
+$('#f_sub').addEventListener('change', e => { draft.sub = e.target.value; });
+const keepDyn = e => { const el = e.target.closest('[data-k]'); if (el) draft.d[el.dataset.k] = el.type === 'checkbox' ? el.checked : el.value; };
+$('#f_dyn').addEventListener('input', keepDyn);
+$('#f_dyn').addEventListener('change', keepDyn);
 $('#f_coords').addEventListener('change', () => {
   const c = parseCoords($('#f_coords').value);
   if (c) setDraftSpot(c.lat, c.lng, true, true);
@@ -950,7 +1395,19 @@ $('#f_here').addEventListener('click', () => {
     () => { btn.disabled = false; btn.textContent = 'Use where I am standing now'; err.textContent = 'Could not get your location. Allow location for this site, or tap the map instead.'; err.hidden = false; },
     { enableHighAccuracy: true, timeout: 15000 });
 });
-$('#f_photoList').addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (!b) return; draft.photos.splice(+b.dataset.rm, 1); renderDraftPhotos(); });
+$('#f_photoList').addEventListener('click', e => {
+  const rm = e.target.closest('[data-rm]'), mv = e.target.closest('[data-mv]');
+  if (rm) {
+    const gone = draft.photos.splice(+rm.dataset.rm, 1)[0];
+    // A photo uploaded during this edit but never saved is removed from storage. Saved photos are only removed after Save.
+    if (gone && gone.fresh) removePhotos([gone.url]);
+  } else if (mv) {
+    const i = +mv.dataset.i, j = i + (+mv.dataset.mv);
+    if (j < 0 || j >= draft.photos.length) return;
+    const t = draft.photos[i]; draft.photos[i] = draft.photos[j]; draft.photos[j] = t;
+  } else return;
+  renderDraftPhotos();
+});
 $('#f_photos').addEventListener('change', async e => {
   const files = Array.from(e.target.files || []);
   const note = $('#f_photoNote');
@@ -961,27 +1418,62 @@ $('#f_photos').addEventListener('change', async e => {
     try { const b = await fileToBlob(f); draft.photos.push({ blob: b, preview: URL.createObjectURL(b) }); renderDraftPhotos(); } catch (err) { bad++; }
   }
   e.target.value = '';
-  note.textContent = bad ? bad + (bad === 1 ? ' photo' : ' photos') + ' could not be read. Use JPG or PNG photos.' :
-    skipped ? 'Only 10 photos fit on one listing. The rest were left out.' : 'Photos are made smaller automatically so the site stays fast.';
+  renderDraftPhotos();
+  if (bad) note.textContent = bad + (bad === 1 ? ' photo' : ' photos') + ' could not be read. Use JPG or PNG photos.';
+  else if (skipped) note.textContent = 'Only 10 photos fit on one listing. The rest were left out.';
 });
+function autoTitle(kind, sub, d, areaTxt, place) {
+  let t;
+  if (kind === 'land') t = (areaTxt ? areaTxt + ' land' : 'Land');
+  else if (kind === 'house') t = d.bedrooms ? d.bedrooms + ' bedroom house' : 'House';
+  else if (kind === 'flat') t = sub && sub !== 'Other' ? (sub === 'Studio' ? 'Studio flat' : sub + ' flat') : 'Flat';
+  else if (kind === 'room') t = sub && sub !== 'Other' ? sub : 'Room';
+  else if (kind === 'shutter') t = areaTxt ? areaTxt + ' shutter' : 'Shutter';
+  else t = sub && sub !== 'Other' ? sub : 'Commercial property';
+  return (t + (place ? ' in ' + place : '')).slice(0, 90);
+}
 $('#editForm').addEventListener('submit', async e => {
   e.preventDefault();
   const err = $('#f_err');
   const bad = m => { err.textContent = m; err.hidden = false; };
-  const title = $('#f_title').value.trim();
-  if (!title) return bad('Add a title so buyers know what this is.');
-  const cat = formCat(), rent = cat.deal === 'rent';
-  const av = parseFloat($('#f_area').value);
+  const kind = formKind(), K = KINDS[kind];
+  if (!K) return bad('Choose what it is first: land, house, flat and so on.');
+  if (!draft.deal) return bad('Choose For sale or For rent.');
+  const cat = catOf(draft.type), rent = draft.deal === 'rent';
+  const areaRaw = $('#f_area').value.trim(), av = parseFloat(areaRaw.replace(/,/g, ''));
+  if (areaRaw && !(av > 0)) return bad(K.size + ' must be a number, for example ' + (K.sizePh || '4') + '.');
+  const unit = UNITS[$('#f_unit').value] ? $('#f_unit').value : K.unit;
   const pv = $('#f_price').value.trim();
   const price = pv ? parseMoney(pv, rent) : { value: 0 };
-  if (!price) return bad('The price could not be read. Type a number such as 45 lakh or 6500000.');
-  const perMode = !rent && $('#f_pmode').value === 'unit' && price.value > 0;
-  if (perMode && !(av > 0)) return bad('Add the size so the total price can be worked out from the price per unit.');
+  if (!price) return bad(rent ? 'The rent could not be read. Type a number such as 35000.' : 'The price could not be read. Type a number such as 65 lakh or 6500000.');
+  const perMode = !!K.perUnit && !rent && $('#f_pmode').value === 'unit' && price.value > 0;
+  if (perMode && !(av > 0)) return bad('Add the land size so the total price can be worked out from the price per ' + UNITS[rateUnit(unit)][0] + '.');
+  const builtRaw = K.built ? $('#f_built').value.trim() : '', bv = parseFloat(builtRaw.replace(/,/g, ''));
+  if (builtRaw && !(bv > 0)) return bad('Built-up area must be a number, for example 2400.');
+  const depRaw = rent ? $('#f_deposit').value.trim() : '';
+  const dep = depRaw ? parseMoney(depRaw, true) : { value: 0 };
+  if (!dep) return bad('The deposit could not be read. Type a number such as 70000.');
+  const social = postUrl($('#f_social').value);
+  if (social === null) return bad('The post link could not be read. Paste the full link from Facebook, Instagram or TikTok. It starts with https://');
+  // Only the facts that belong to this category and deal are saved. Anything else is cleared.
+  const d = {};
+  for (const k of fieldsOf(K, rent)) {
+    const f = FIELDS[k], raw = draft.d[k], v = cleanVal(f, raw);
+    if ((f.t === 'num' || f.t === 'int') && raw != null && String(raw).trim() !== '' && v == null) {
+      return bad(f.year ? 'Built year must be a year, for example 2078 or 2021.' : labelOf(k, K) + ' must be a number' + (f.ph ? ', for example ' + f.ph : '') + '.');
+    }
+    if (v != null) d[k] = v;
+  }
   const c = parseCoords($('#f_coords').value);
   if (c && (draft.lat == null || Math.abs(c.lat - draft.lat) > 0.00002 || Math.abs(c.lng - draft.lng) > 0.00002)) setDraftSpot(c.lat, c.lng, true, true);
   if (draft.lat == null || draft.lng == null) return bad('Tap the map or paste the location so the pin can be placed.');
   const old = draft.id ? byId(draft.id) : null;
   const id = draft.id || uuid();
+  const place = $('#f_place').value.trim();
+  const sub = K.sub && K.sub[1].indexOf($('#f_sub').value) >= 0 ? $('#f_sub').value : '';
+  const area = { v: av > 0 ? av : 0, u: unit };
+  const total = perMode ? Math.round(price.value * av * UNITS[unit][1] / UNITS[rateUnit(unit)][1]) : price.value;
+  const title = $('#f_title').value.trim() || autoTitle(kind, sub, d, areaText({ area: area }), place.split(',')[0].trim());
   const ok = await mutate(err, async () => {
     const urls = [];
     for (let i = 0; i < draft.photos.length && i < 10; i++) {
@@ -992,31 +1484,38 @@ $('#editForm').addEventListener('submit', async e => {
       if (up.error) throw up.error;
       const pub = sb.storage.from('photos').getPublicUrl(path);
       urls.push(pub.data.publicUrl);
-      ph.url = pub.data.publicUrl;
+      ph.url = pub.data.publicUrl; ph.fresh = true;
     }
     const item = {
-      id: id, type: cat.id, title: title, price: perMode ? Math.round(price.value * av) : price.value, rateMode: perMode,
-      area: { v: av > 0 ? av : 0, u: $('#f_unit').value }, place: $('#f_place').value.trim(), district: draft.district,
-      lat: draft.lat, lng: draft.lng, desc: $('#f_desc').value.trim(), photos: urls, status: $('#f_sold').checked ? 'sold' : 'available'
+      id: id, type: cat.id, deal: draft.deal, sub: sub, title: title, price: total, rateMode: perMode, area: area,
+      built: { v: K.built && bv > 0 ? bv : 0, u: $('#f_builtUnit').value === 'sqm' ? 'sqm' : 'sqft' }, deposit: dep.value, social: social, d: d,
+      place: place, district: DISTRICT, lat: draft.lat, lng: draft.lng, desc: $('#f_desc').value.trim(), photos: urls,
+      status: STATUSES.indexOf($('#f_status').value) >= 0 ? $('#f_status').value : 'available'
     };
-    const r = await sb.from('listings').upsert(toRow(item)).select();
+    const row = toRow(item);
+    // Editing changes the saved row; it never adds a second copy. Adding inserts one new row.
+    const r = old ? await sb.from('listings').update(row).eq('id', id).select() : await sb.from('listings').insert(row).select();
     if (r.error) throw r.error;
-    const saved = r.data && r.data[0] ? fromRow(r.data[0]) : Object.assign({ added: new Date().toISOString() }, item);
+    if (old && Array.isArray(r.data) && !r.data.length) throw { code: '42501', message: 'not allowed' };
+    const saved = r.data && r.data[0] ? fromRow(r.data[0]) : fromRow(Object.assign({ created_at: old ? old.added : new Date().toISOString() }, row));
+    draft.photos.forEach(ph => { ph.fresh = false; });
     if (old) { removePhotos(old.photos.filter(u => urls.indexOf(u) < 0)); state.listings = state.listings.map(x => x.id === id ? saved : x); }
     else state.listings.unshift(saved);
   }, old ? 'Listing updated.' : 'Listing published.');
   if (ok) dlgEdit.close();
 });
+// Closing the form without saving: photos uploaded during a failed save are not left behind in storage.
+dlgEdit.addEventListener('close', () => { if (draft) { removePhotos(draft.photos.filter(p => p.fresh).map(p => p.url)); draft.photos.forEach(p => { p.fresh = false; }); } });
 
 /* ---------- categories ---------- */
 function renderCats() {
   $('#catList').innerHTML = state.cats.map(c => {
     const n = state.listings.filter(l => l.type === c.id).length;
-    return '<li style="--c:' + cvar(c) + '"><svg viewBox="-12 -12 24 24" aria-hidden="true">' + shapeOf(c) + '</svg><span class="cn">' + esc(c.label) + '</span><span class="hint">' + (c.deal === 'rent' ? 'For rent' : 'For sale') + ' · ' + n + (n === 1 ? ' listing' : ' listings') + '</span>' +
-      (n === 0 && state.cats.length > 1 ? '<button class="btn small" type="button" data-rmcat="' + esc(c.id) + '">Remove</button>' : '') + '</li>';
+    return '<li style="--c:' + cvar(c) + '"><svg viewBox="-12 -12 24 24" aria-hidden="true">' + shapeOf(c) + '</svg><span class="cn">' + esc(catName(c)) + '</span><span class="hint">' + KIND_NAMES[kindOf(c)] + ' form · ' + n + (n === 1 ? ' listing' : ' listings') + '</span>' +
+      (n === 0 && !DEF_CATS.some(d => d.id === c.id) ? '<button class="btn small" type="button" data-rmcat="' + esc(c.id) + '">Remove</button>' : '') + '</li>';
   }).join('');
 }
-$('#catBtn').addEventListener('click', () => { $('#c_name').value = ''; $('#c_deal_sale').checked = true; $('#c_err').hidden = true; renderCats(); dlgCats.showModal(); });
+$('#catBtn').addEventListener('click', () => { $('#c_name').value = ''; $('#c_form').value = 'land'; $('#c_err').hidden = true; renderCats(); show(dlgCats); });
 $('#catList').addEventListener('click', async e => {
   const b = e.target.closest('[data-rmcat]'); if (!b) return;
   const id = b.dataset.rmcat;
@@ -1035,9 +1534,10 @@ $('#catForm').addEventListener('submit', async e => {
   if (!name) return bad('Type a name for the new category.');
   if (state.cats.some(c => c.label.toLowerCase() === name.toLowerCase())) return bad('There is already a category with that name.');
   if (state.cats.length >= 12) return bad('Twelve categories is the most this page can show clearly. Remove one first.');
+  const form = KINDS[$('#c_form').value] ? $('#c_form').value : 'land';
   const used = state.cats.map(c => c.color || 1);
   let color = 1; while (used.indexOf(color) >= 0 && color < 8) color++;
-  const row = { id: 'c' + Date.now().toString(36), label: name, deal: $('#c_deal_rent').checked ? 'rent' : 'sale', color: color, shape: state.cats.length % SHAPES.length, no_rate: false, sort: state.cats.reduce((m, c) => Math.max(m, c.sort || 0), 0) + 1 };
+  const row = { id: 'c' + Date.now().toString(36), label: name, deal: KINDS[form].deals[0], color: color, shape: state.cats.length % SHAPES.length, no_rate: form !== 'land', sort: state.cats.reduce((m, c) => Math.max(m, c.sort || 0), 0) + 1, form: form };
   const ok = await mutate(err, async () => {
     const r = await sb.from('categories').insert(row);
     if (r.error) throw r.error;
@@ -1046,7 +1546,7 @@ $('#catForm').addEventListener('submit', async e => {
   if (ok) { $('#c_name').value = ''; renderCats(); }
 });
 
-/* ---------- site details ---------- */
+/* ---------- site settings ---------- */
 function openSite() {
   const s = state.site;
   $('#s_name').value = s.name || ''; $('#s_owner').value = s.owner || ''; $('#s_tag').value = s.tagline || '';
@@ -1054,7 +1554,7 @@ function openSite() {
   $('#s_fb').value = s.facebook || ''; $('#s_ig').value = s.instagram || ''; $('#s_tt').value = s.tiktok || '';
   $('#s_about').value = s.about || '';
   $('#s_err').hidden = true;
-  dlgSite.showModal();
+  show(dlgSite);
 }
 $('#siteForm').addEventListener('submit', async e => {
   e.preventDefault();
@@ -1069,34 +1569,49 @@ $('#siteForm').addEventListener('submit', async e => {
     const r = await sb.from('site').upsert({ id: 1, data: next, updated_at: new Date().toISOString() });
     if (r.error) throw r.error;
     state.site = Object.assign({}, DEF_SITE, next);
-  }, 'Site details saved.');
+  }, 'Site settings saved.');
   if (ok) dlgSite.close();
 });
 
 /* ---------- dialogs: close buttons and backdrop ---------- */
-[dlgDetail, dlgContact, dlgEdit, dlgSite, dlgCats, dlgLogin].forEach(d => {
+[dlgDetail, dlgContact, dlgEdit, dlgSite, dlgCats, dlgLogin, dlgManage].forEach(d => {
   d.addEventListener('click', e => {
     if (e.target.closest('[data-close]')) { d.close(); return; }
     if (e.target === d && (d === dlgDetail || d === dlgContact)) d.close();
   });
 });
+[dlgDetail, dlgContact, dlgEdit, dlgSite, dlgCats, dlgLogin, dlgManage, dlgConfirm].forEach(d => {
+  d.addEventListener('close', () => {
+    const i = stack.indexOf(d); if (i >= 0) stack.splice(i, 1);
+    const t = $('#toast'); if (t.parentNode === d) (stack[stack.length - 1] || document.body).appendChild(t);
+  });
+});
 
 /* ---------- boot ---------- */
-function renderAll() { renderHeader(); renderLegend(); renderList(); }
+function renderAll() { renderHeader(); renderLegend(); renderList(); if (dlgManage.open) renderManage(); }
+function openFromUrl() {
+  const m = /property\/([\w-]+)\/?$/.exec(location.pathname) || /^#p-([\w-]+)$/.exec(location.hash || '');
+  if (!m) return;
+  const l = byId(m[1]);
+  if (l) { map.setView([l.lat, l.lng], 16); openDetail(l.id); }
+  else { setUrl(''); toast('That property is no longer listed. Here is everything that is available.'); }
+}
 renderHeader(); renderLegend();
 (async function boot() {
   try { await loadAll(); }
   catch (e) {
     console.error(e);
-    $('#cards').innerHTML = '<li class="empty">The listings could not be loaded. If this is a new site, the database is not set up yet: run setup-all.sql in Supabase (SQL Editor), then reload. Otherwise check your connection and reload.</li>';
+    $('#cards').innerHTML = '<li class="empty">The listings could not be loaded. If this is a new site, the database is not set up yet: run database-update.sql in Supabase (SQL Editor), then reload. Otherwise check your connection and reload.</li>';
     renderHeader(); renderLegend();
     checkOwner();
     return;
   }
   renderAll();
-  const m = /^#p-([\w-]+)$/.exec(location.hash || '');
-  if (m && byId(m[1])) { const l = byId(m[1]); map.setView([l.lat, l.lng], 16); openDetail(m[1]); }
-  checkOwner();
+  // The owner may be opening a hidden listing, so wait for the sign-in check before giving up on the address.
+  if (/property\/[\w-]+\/?$/.test(location.pathname) || /^#p-/.test(location.hash || '')) {
+    const m = /property\/([\w-]+)\/?$/.exec(location.pathname) || /^#p-([\w-]+)$/.exec(location.hash);
+    if (m && byId(m[1])) { openFromUrl(); checkOwner(); } else checkOwner().then(openFromUrl);
+  } else checkOwner();
   // GPS when the map opens: show the blue dot, keep the whole area in view.
   locate(() => {}, true);
   fetch('/api/explain').then(r => r.ok ? r.json() : null).then(j => { aiOn = !!(j && j.enabled); if (aiOn && budget) $('#aiBox').hidden = false; }).catch(() => {});

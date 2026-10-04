@@ -3,17 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Ghar Jagga Map</title>
-<meta name="description" content="Houses and land for sale, shutters and rooms for rent in the Kathmandu Valley. Browse by place on the map and see the price per anna.">
-<meta property="og:title" content="Ghar Jagga Map">
-<meta property="og:description" content="Houses and land for sale, shutters and rooms for rent in the Kathmandu Valley. Browse by place on the map and see the price per anna.">
+<title>Ghar Jagga Map: Kathmandu houses, land, flats and rooms</title>
+<meta name="description" content="Kathmandu houses, land, flats, rooms and commercial properties for sale and rent. Browse every listing on the map, with price per Anna, road width and photos.">
+<meta property="og:title" content="Ghar Jagga Map: Kathmandu houses, land, flats and rooms">
+<meta property="og:description" content="Kathmandu houses, land, flats, rooms and commercial properties for sale and rent. Browse every listing on the map, with price per Anna, road width and photos.">
+<meta property="og:site_name" content="Ghar Jagga Map">
+<meta property="og:locale" content="en_US">
+<meta name="twitter:card" content="summary">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#B81D2C">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=Instrument+Sans:wght@400;500;600&amp;family=Noto+Sans+Devanagari:wght@500;700&amp;display=swap">
-<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
 <div class="fatal" id="fatal" role="alert" hidden></div>
@@ -25,7 +28,7 @@
     </div>
     <nav class="social" id="socialNav" aria-label="Social media"></nav>
     <button class="btn" id="loginBtn" type="button">Owner sign in</button>
-    <button class="btn primary" id="talkBtn" type="button">Talk to me</button>
+    <button class="btn primary" id="talkBtn" type="button">Contact</button>
   </header>
 
   <main class="work">
@@ -83,18 +86,71 @@
     </div>
   </section>
       <div class="filters">
+        <div class="chips" id="dealChips" role="group" aria-label="Sale or rent"></div>
         <div class="chips" id="typeChips" role="group" aria-label="Property type"></div>
-        <label class="inline" for="districtSel"><span class="sr">District</span>
-          <select id="districtSel"></select>
-        </label>
-        <label class="inline" for="sortSel"><span class="sr">Sort</span>
-          <select id="sortSel">
-            <option value="new">Newest first</option>
-            <option value="low">Price: low to high</option>
-            <option value="high">Price: high to low</option>
-            <option value="near">Nearest to me</option>
-          </select>
-        </label>
+        <div class="frow">
+          <label class="inline" for="placeSel"><span class="sr">Place</span>
+            <select id="placeSel"></select>
+          </label>
+          <label class="inline" for="sortSel"><span class="sr">Sort</span>
+            <select id="sortSel">
+              <option value="new">Newest first</option>
+              <option value="low">Lowest price</option>
+              <option value="high">Highest price</option>
+              <option value="near">Nearest to me</option>
+            </select>
+          </label>
+          <button class="btn small" id="moreBtn" type="button" aria-expanded="false" aria-controls="moreBox">More filters</button>
+        </div>
+        <div class="more" id="moreBox" hidden>
+          <div class="grid2">
+            <label class="field" for="fl_min"><span>Price from (Rs.)</span>
+              <input id="fl_min" type="text" placeholder="20 lakh" autocomplete="off">
+            </label>
+            <label class="field" for="fl_max"><span>Price up to (Rs.)</span>
+              <input id="fl_max" type="text" placeholder="1.5 crore" autocomplete="off">
+            </label>
+          </div>
+          <div class="grid2">
+            <div class="field"><span id="fl_sizeLabel">Size at least</span>
+              <div class="pair">
+                <input id="fl_size" type="text" inputmode="decimal" placeholder="4" aria-labelledby="fl_sizeLabel" autocomplete="off">
+                <select id="fl_sizeUnit" aria-label="Size unit">
+                  <option value="aana">Anna</option>
+                  <option value="ropani">Ropani</option>
+                  <option value="sqft">sq ft</option>
+                  <option value="sqm">sq m</option>
+                </select>
+              </div>
+            </div>
+            <label class="field" for="fl_beds"><span>Bedrooms / BHK</span>
+              <select id="fl_beds">
+                <option value="0">Any</option>
+                <option value="1">1 or more</option>
+                <option value="2">2 or more</option>
+                <option value="3">3 or more</option>
+                <option value="4">4 or more</option>
+                <option value="5">5 or more</option>
+              </select>
+            </label>
+            <label class="field" for="fl_road"><span>Road width</span>
+              <select id="fl_road">
+                <option value="0">Any</option>
+                <option value="8">8 ft or wider</option>
+                <option value="10">10 ft or wider</option>
+                <option value="13">13 ft or wider</option>
+                <option value="16">16 ft or wider</option>
+                <option value="20">20 ft or wider</option>
+                <option value="26">26 ft or wider</option>
+                <option value="32">32 ft or wider</option>
+              </select>
+            </label>
+          </div>
+          <p class="err" id="fl_err" role="alert" hidden></p>
+          <div class="row">
+            <button class="btn small" id="fl_clear" type="button">Clear these filters</button>
+          </div>
+        </div>
       </div>
       <p class="count" id="countLine"></p>
       <ul class="cards" id="cards"><li class="empty">Loading properties…</li></ul>
@@ -103,18 +159,19 @@
 
   <footer class="foot">
     <p id="aboutText" hidden></p>
-    <p class="hint">Open a listing to get directions on Google Maps. Prices are asking prices in Nepali rupees. 1 ropani is 16 anna, and 1 anna is 342.25 sq ft (31.8 sq m).</p>
-    <p class="hint">District boundaries: geoJSON-Nepal by Saugat Acharya (MIT).
-      <button class="linkbtn" id="loginLink" type="button">Owner sign in</button></p>
+    <p class="hint">Open a listing to get directions on Google Maps. Prices are asking prices in Nepali rupees. 1 Ropani is 16 Anna, 1 Anna is 4 Paisa, 1 Paisa is 4 Daam, and 1 Anna is 342.25 sq ft (31.8 sq m).</p>
+    <p class="hint"><button class="linkbtn" id="loginLink" type="button">Owner sign in</button></p>
   </footer>
 </div>
 
 <div class="ownerbar" id="ownerBar" hidden>
   <span class="owner-title">Owner tools</span>
   <button class="btn small primary" id="addBtn" type="button">+ Add property</button>
+  <button class="btn small" id="manageBtn" type="button">Manage listings</button>
   <button class="btn small" id="catBtn" type="button">Categories</button>
-  <button class="btn small" id="siteBtn" type="button">Site details</button>
+  <button class="btn small" id="siteBtn" type="button">Site settings</button>
   <button class="btn small" id="signOutBtn" type="button">Sign out</button>
+  <p class="dbnote" id="dbNote" role="alert" hidden>The database needs its update before new listings can be saved. In Supabase open SQL Editor and run database-update.sql.</p>
 </div>
 
 <dialog id="dlgDetail" aria-label="Property details"><div class="dlg" id="detailBody"></div></dialog>
@@ -122,7 +179,7 @@
 <dialog id="dlgContact" aria-labelledby="contactH">
   <div class="dlg">
     <div class="dlg-head">
-      <h2 id="contactH">Talk to me</h2>
+      <h2 id="contactH">Contact</h2>
       <button class="x" type="button" data-close aria-label="Close">&times;</button>
     </div>
     <div id="contactBody" class="form"></div>
@@ -137,79 +194,109 @@
     </div>
 
     <fieldset class="plain">
-      <legend>Category</legend>
-      <div class="seg" id="f_types"></div>
+      <legend>What is it?</legend>
+      <div class="seg typegrid" id="f_types"></div>
     </fieldset>
 
-    <label class="field" for="f_title"><span>Title</span>
-      <input id="f_title" type="text" maxlength="90" placeholder="For example: 4 anna plot near Ring Road">
-    </label>
+    <fieldset class="plain" id="f_dealBox" hidden>
+      <legend>What do you want to do?</legend>
+      <div class="seg dealgrid" id="f_deals"></div>
+    </fieldset>
 
-    <div class="grid2">
+    <p class="hint" id="f_stepHint">Choose what it is. The form then shows only the questions for that kind of property.</p>
+
+    <div class="form" id="f_body" hidden>
+      <label class="field" for="f_sub" id="f_subBox"><span id="f_subLabel">Type</span>
+        <select id="f_sub"></select>
+      </label>
+
+      <label class="field" for="f_title"><span>Title</span>
+        <input id="f_title" type="text" maxlength="90" autocomplete="off">
+        <small class="hint">Leave it empty and a title is written for you.</small>
+      </label>
+
       <div class="field"><span id="f_priceLabel">Price (Rs.)</span>
-        <div class="pair">
-          <input id="f_price" type="text" placeholder="45 lakh, 1.5 crore or 6500000" aria-labelledby="f_priceLabel" autocomplete="off">
+        <div class="pair" id="f_pricePair">
+          <input id="f_price" type="text" aria-labelledby="f_priceLabel" autocomplete="off">
           <select id="f_pmode" aria-label="What the price is for">
             <option value="total">total price</option>
-            <option value="unit">per anna</option>
+            <option value="unit">per Anna</option>
           </select>
         </div>
+        <p class="hint" id="f_priceRead"></p>
       </div>
-      <div class="field"><span>Size</span>
-        <div class="pair">
-          <input id="f_area" type="text" inputmode="decimal" placeholder="4" aria-label="Size amount" autocomplete="off">
-          <select id="f_unit" aria-label="Size unit">
-            <option value="aana">anna</option>
-            <option value="ropani">ropani</option>
-            <option value="bigha">bigha</option>
-            <option value="kattha">kattha</option>
-            <option value="dhur">dhur</option>
-            <option value="sqm">sq m</option>
-            <option value="sqft">sq ft</option>
-          </select>
+
+      <div class="grid2">
+        <div class="field"><span id="f_sizeLabel">Size</span>
+          <div class="pair">
+            <input id="f_area" type="text" inputmode="decimal" aria-labelledby="f_sizeLabel" autocomplete="off">
+            <select id="f_unit" aria-label="Size unit"></select>
+          </div>
+        </div>
+        <div class="field" id="f_builtBox"><span id="f_builtLabel">Built-up area</span>
+          <div class="pair">
+            <input id="f_built" type="text" inputmode="decimal" placeholder="2400" aria-labelledby="f_builtLabel" autocomplete="off">
+            <select id="f_builtUnit" aria-label="Built-up area unit">
+              <option value="sqft">sq ft</option>
+              <option value="sqm">sq m</option>
+            </select>
+          </div>
+        </div>
+        <label class="field" for="f_deposit" id="f_depositBox"><span>Deposit (optional, Rs.)</span>
+          <input id="f_deposit" type="text" placeholder="For example: 70000" autocomplete="off">
+        </label>
+      </div>
+
+      <div class="form" id="f_dyn"></div>
+
+      <h3 class="sect">Location</h3>
+      <div class="grid2">
+        <label class="field" for="f_place"><span>Place name</span>
+          <input id="f_place" type="text" maxlength="60" list="placeList" placeholder="For example: Sanepa" autocomplete="off">
+          <datalist id="placeList"></datalist>
+        </label>
+        <div class="field"><span>District</span>
+          <p class="readout" id="f_district">Kathmandu</p>
         </div>
       </div>
-    </div>
-    <p class="hint" id="f_priceRead"></p>
+      <p class="hint">Write the place the same way every time (Sanepa, Bhaisepati, Kupondole) so its listings are counted together.</p>
 
-    <label class="field" for="f_place"><span>Place name</span>
-      <input id="f_place" type="text" maxlength="60" list="placeList" placeholder="For example: Sanepa" autocomplete="off">
-      <datalist id="placeList"></datalist>
-    </label>
-    <p class="hint">Write the place the same way every time (Sanepa, Bhaisepati, Kupondole) so its listings are counted together.</p>
-
-    <div class="field"><span>Location</span>
-      <p class="hint">Tap the map to drop the pin, then drag it to the exact spot.</p>
-      <div id="miniMap" class="mapbox minimap"></div>
-    </div>
-    <div class="grid2">
+      <div class="field"><span>Exact location on the map</span>
+        <p class="hint">Tap the map to drop the pin, then drag it to the exact spot.</p>
+        <div id="miniMap" class="mapbox minimap"></div>
+      </div>
       <label class="field" for="f_coords"><span>Coordinates</span>
         <input id="f_coords" type="text" placeholder="27.71720, 85.32400" autocomplete="off">
       </label>
-      <div class="field"><span>District</span>
-        <p class="readout" id="f_district">Not placed yet</p>
-      </div>
-    </div>
-    <div class="row">
-      <button class="btn small" type="button" id="f_here">Use where I am standing now</button>
-      <span class="hint">Or press and hold the spot in Google Maps, then paste its two numbers into Coordinates.</span>
-    </div>
-
-    <label class="field" for="f_desc"><span>Details</span>
-      <textarea id="f_desc" rows="4" maxlength="1200" placeholder="Road access, facing, water, papers, number of rooms, anything a buyer asks first"></textarea>
-    </label>
-
-    <div class="field"><span>Photos (up to 10)</span>
-      <div class="photos" id="f_photoList"></div>
       <div class="row">
-        <label class="btn small filebtn" for="f_photos">Choose photos
-          <input id="f_photos" type="file" accept="image/*" multiple>
-        </label>
-        <span class="hint" id="f_photoNote">Photos are made smaller automatically so the site stays fast.</span>
+        <button class="btn small" type="button" id="f_here">Use where I am standing now</button>
+        <span class="hint">Or press and hold the spot in Google Maps, then paste its two numbers into Coordinates.</span>
       </div>
-    </div>
 
-    <label class="check" for="f_sold"><input id="f_sold" type="checkbox"> <span id="f_soldLabel">Already sold</span></label>
+      <h3 class="sect">Description and photos</h3>
+      <label class="field" for="f_desc"><span>Description</span>
+        <textarea id="f_desc" rows="4" maxlength="1500" placeholder="Anything a buyer or tenant asks first"></textarea>
+      </label>
+
+      <div class="field"><span>Photos (up to 10)</span>
+        <div class="photos" id="f_photoList"></div>
+        <div class="row">
+          <label class="btn small filebtn" for="f_photos">Choose photos
+            <input id="f_photos" type="file" accept="image/*" multiple>
+          </label>
+          <span class="hint" id="f_photoNote"></span>
+        </div>
+      </div>
+
+      <label class="field" for="f_social"><span>Social media post / video link (optional)</span>
+        <input id="f_social" type="text" inputmode="url" maxlength="500" placeholder="Paste Facebook, Instagram or TikTok post link" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <small class="hint">Visitors get a button that opens your post in a new tab. Nothing is copied from the post.</small>
+      </label>
+
+      <label class="field" for="f_status"><span>Status</span>
+        <select id="f_status"></select>
+      </label>
+    </div>
 
     <p class="err" id="f_err" role="alert" hidden></p>
     <div class="row end">
@@ -222,12 +309,12 @@
 <dialog id="dlgSite" aria-labelledby="siteH">
   <form class="dlg form" id="siteForm" novalidate>
     <div class="dlg-head">
-      <h2 id="siteH">Site details and contacts</h2>
+      <h2 id="siteH">Site settings and contacts</h2>
       <button class="x" type="button" data-close aria-label="Close">&times;</button>
     </div>
     <div class="grid2">
       <label class="field" for="s_name"><span>Site name</span><input id="s_name" type="text" maxlength="40"></label>
-      <label class="field" for="s_owner"><span>Your name</span><input id="s_owner" type="text" maxlength="40" placeholder="Shown on the contact panel"></label>
+      <label class="field" for="s_owner"><span>Your name</span><input id="s_owner" type="text" maxlength="40" placeholder="Shown on the Contact panel"></label>
     </div>
     <label class="field" for="s_tag"><span>Tagline</span><input id="s_tag" type="text" maxlength="90"></label>
     <div class="grid2">
@@ -258,19 +345,22 @@
       <h2 id="catsH">Categories</h2>
       <button class="x" type="button" data-close aria-label="Close">&times;</button>
     </div>
-    <p class="hint">Categories are the groups visitors filter by. A category can be removed only when no listing uses it.</p>
+    <p class="hint">Categories are the groups visitors filter by. Sale or rent is chosen on each listing. A category can be removed only when no listing uses it.</p>
     <ul class="catlist" id="catList"></ul>
     <form id="catForm" class="form" novalidate>
       <label class="field" for="c_name"><span>New category name</span>
-        <input id="c_name" type="text" maxlength="24" placeholder="For example: Flat rent" autocomplete="off">
+        <input id="c_name" type="text" maxlength="24" placeholder="For example: Hostel" autocomplete="off">
       </label>
-      <fieldset class="plain">
-        <legend>Sale or rent</legend>
-        <div class="seg">
-          <label><input type="radio" name="c_deal" id="c_deal_sale" value="sale" checked><span>For sale</span></label>
-          <label><input type="radio" name="c_deal" id="c_deal_rent" value="rent"><span>For rent (per month)</span></label>
-        </div>
-      </fieldset>
+      <label class="field" for="c_form"><span>Which form should it use?</span>
+        <select id="c_form">
+          <option value="land">Land form (land units, price per Anna, road)</option>
+          <option value="house">House form (bedrooms, land area, built-up area)</option>
+          <option value="business">Business form (property type, floors, rooms)</option>
+          <option value="shutter">Shutter form (sq ft, frontage, floor)</option>
+          <option value="room">Room form (room type, bathroom, kitchen)</option>
+          <option value="flat">Flat form (BHK, sq ft, floor, lift)</option>
+        </select>
+      </label>
       <p class="err" id="c_err" role="alert" hidden></p>
       <div class="row end">
         <button class="btn" type="button" data-close>Close</button>
@@ -296,12 +386,41 @@
   </form>
 </dialog>
 
+<dialog id="dlgManage" aria-labelledby="manageH">
+  <div class="dlg form">
+    <div class="dlg-head">
+      <h2 id="manageH">Manage listings</h2>
+      <button class="x" type="button" data-close aria-label="Close">&times;</button>
+    </div>
+    <div class="row">
+      <button class="btn small primary" type="button" id="m_add">+ Add property</button>
+    </div>
+    <div class="chips" id="mTabs" role="group" aria-label="Status"></div>
+    <p class="err" id="m_err" role="alert" hidden></p>
+    <ul class="mlist" id="mList"></ul>
+  </div>
+</dialog>
+
+<dialog id="dlgConfirm" aria-labelledby="confirmH">
+  <div class="dlg form">
+    <div class="dlg-head">
+      <h2 id="confirmH">Delete this listing permanently?</h2>
+    </div>
+    <p><strong id="confirmTitle"></strong></p>
+    <p class="hint">It is removed from the site together with its photos. This cannot be undone. To keep it but hide it, choose the status Unavailable instead.</p>
+    <p class="err" id="confirmErr" role="alert" hidden></p>
+    <div class="row end">
+      <button class="btn" type="button" id="confirmNo">Cancel</button>
+      <button class="btn danger solid" type="button" id="confirmYes">Delete permanently</button>
+    </div>
+  </div>
+</dialog>
+
 <div class="toast" id="toast" role="status" hidden></div>
 
-<script src="vendor/leaflet/leaflet.js"></script>
+<script src="/vendor/leaflet/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/config.js"></script>
-<script src="js/geo.js"></script>
-<script src="js/app.js"></script>
+<script src="/js/config.js"></script>
+<script src="/js/app.js"></script>
 </body>
 </html>

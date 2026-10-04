@@ -1,6 +1,6 @@
 # Ghar Jagga Map: setup
 
-A plain website (no build step): a street map of Nepal with your listings, stored in your Supabase project.
+A plain website (no build step): a street map of Kathmandu with your listings, stored in your Supabase project.
 Do the steps in order. Steps 1 to 4 get the site live. Steps 5 to 7 can wait.
 
 Your Supabase address and public key are already in `js/config.js`.
@@ -10,7 +10,12 @@ Your Supabase address and public key are already in `js/config.js`.
 1. Open your project at supabase.com.
 2. Left menu: **SQL Editor**, then **New query**.
 3. Open `supabase/schema.sql` from this folder, copy everything, paste it, and press **Run**.
-   You should see "Success". It creates the tables, the five starting categories and the photo storage.
+   You should see "Success". It creates the tables, the six categories (Land, House, Business, Shutter, Room, Flat)
+   and the photo storage.
+
+The same file is also the **update**. Whenever a new version of the site says the database needs its update,
+run `supabase/schema.sql` again. It only adds what is missing and never deletes or changes a saved listing.
+Run it BEFORE you upload the new site files.
 
 ## 2. Make yourself the owner
 
@@ -26,7 +31,7 @@ Only this account can add, change or delete listings. Visitors can only read.
 
 1. On github.com create a new repository (for example `gharjagga`). Private is fine.
 2. Upload everything inside this folder, keeping the folders as they are:
-   `index.html`, `css/`, `js/`, `vendor/`, `api/`, `supabase/`, `SETUP.md`.
+   `index.html`, `vercel.json`, `css/`, `js/`, `vendor/`, `api/`, `supabase/`, `SETUP.md`.
 
 ## 4. Deploy on Vercel
 
@@ -34,7 +39,7 @@ Only this account can add, change or delete listings. Visitors can only read.
 2. Framework preset: **Other**. Leave build settings empty. Press **Deploy**.
 3. Open the address Vercel gives you (something like `gharjagga.vercel.app`).
 4. Scroll to the bottom, press **Owner sign in**, and sign in with the email and password from step 2.
-   The owner bar appears at the bottom. Add your first property, then open **Site details and contacts**
+   The owner bar appears at the bottom. Add your first property, then open **Site settings**
    to add your phone, WhatsApp, Facebook, Instagram and TikTok.
 
 ## 5. Nicer street map (MapTiler)
@@ -73,13 +78,23 @@ This part has NOT been tested against Google's live service.
 
 ## Using the site
 
-- **Add a property:** Owner sign in, **+ Add property**. Type the price as a total or per anna.
+- **Add a property:** Owner sign in, **+ Add property**. Choose what it is (Land, House, Business, Shutter, Room, Flat),
+  then For sale or For rent. The form then asks only the questions for that kind of property.
+  Land can be priced as a total or per Anna. Flats, shutters and rooms are measured only in sq ft or sq m.
   On your phone at the property, press **Use where I am standing now** to place the pin.
+- **Photos:** up to 10 per listing. Pick several at once, use the arrows to change the order (the first is the cover),
+  the cross removes one. They are shrunk before upload.
+- **Video:** paste the link of your Facebook, Instagram or TikTok post into **Social media post / video link**.
+  Visitors get a **View video / post** button that opens your post. The video itself stays on the social site.
+- **Manage listings:** every listing with View, Edit, Delete and its status. **Sold**, **Rented** and **Unavailable**
+  keep the listing; Unavailable hides it from visitors. **Delete** removes it and its photos for good.
 - **Places:** write the place name the same way every time (Sanepa, Bhaisepati) so they are counted together.
-- **Categories:** the **Categories** button adds your own, for sale or for rent.
-- **Share a listing:** open it and press **Copy link**, then paste the link in a Facebook, Instagram or TikTok post.
-- **Photos:** up to 10 per listing. They are shrunk before upload. Supabase's free plan has a storage limit;
-  check **Storage** in the Supabase dashboard now and then.
+- **District:** every listing is saved as Kathmandu. To open another district later, add `DISTRICT: 'Lalitpur'`
+  (and a `MAP_AREA`) to `js/config.js`.
+- **Categories:** the **Categories** button adds your own and lets you choose which of the six forms it uses.
+- **Share a listing:** open it and press **Share link**. Each property has its own address, `/property/...`
+  (this needs the `vercel.json` file, which is included).
+- Supabase's free plan has a storage limit; check **Storage** in the Supabase dashboard now and then.
 
 ## Good to know
 
