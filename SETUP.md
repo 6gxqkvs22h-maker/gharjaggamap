@@ -160,6 +160,16 @@ Each visitor is limited to about 20 questions in 10 minutes.
   (this needs the `vercel.json` file, which is included).
 - Supabase's free plan has a storage limit; check **Storage** in the Supabase dashboard now and then.
 
+## Your logo
+
+The logo files are in `img/`: `mark.png` and `wordmark.png` (top bar), `icon-32.png`, `icon-180.png`, `icon-192.png`,
+`icon-512.png` and `favicon.ico` (browser tab and home screen), and `share.png` (the picture shown when a link to the
+site or to a property is shared on Facebook, WhatsApp, Viber and so on). To change the logo, replace those files with
+new ones of the same names and sizes.
+
+The sharing picture is given by its full address in `index.html` (`og:image`). If the site moves to your own domain,
+change `https://gharjaggamap.vercel.app` there to the new address.
+
 ## Good to know
 
 - `js/config.js` holds only public values. Never put a `service_role` or `secret` key in any file here.

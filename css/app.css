@@ -816,3 +816,12 @@ body.has-owner .page{padding-bottom:120px}
   #dlgProfile{width:calc(100vw - 16px);max-width:calc(100vw - 16px);height:fit-content;max-height:calc(100dvh - 24px);margin:auto;border:1px solid var(--line);border-radius:14px}
   #dlgProfile .dlg-head{padding-top:12px}
 }
+
+/* ============================================================================
+   Update 7: the Ghar Jagga Map logo in the top bar.
+   ============================================================================ */
+.brand{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:9px;text-decoration:none;color:inherit;min-height:44px}
+.bmark{height:36px;width:auto;flex:none;display:block}
+.bword{height:22px;width:auto;min-width:0;max-width:100%;flex:0 1 auto;display:block;object-fit:contain;object-position:left center}
+@media (max-width:389px){.bmark{height:32px}.bword{height:19px}.brand{gap:7px}}
+@media (max-width:339px){.bword{display:none}}
