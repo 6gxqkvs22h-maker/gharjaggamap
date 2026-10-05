@@ -121,6 +121,11 @@ by type, place, budget and bedrooms. To let AI write the answers:
    on "Ask AI to explain" in the budget helper). Optional: `GEMINI_MODEL`.
 3. Redeploy. If answers fail, the built-in search answers instead, so nothing breaks.
 
+To make the free quota last, the AI is called only when a message needs it. Plain searches
+("land under 1 crore in Sanepa", "any house for sale?"), greetings and "how do I contact the owner" are answered
+straight from your listings in full sentences. A repeated question reuses its earlier answer, and each phone gets
+15 AI answers a day (change it with `AI_PER_DAY: 30` in `js/config.js`). After that it still gets listing answers.
+
 This part has NOT been tested against Google's live service. The key stays on Vercel; visitors never see it.
 Each visitor is limited to about 20 questions in 10 minutes.
 

@@ -1466,6 +1466,19 @@ function chatLabels() {
 chatLabels();
 fetch('/api/chat').then(r => r.ok ? r.json() : null).then(j => { chat.ai = !!(j && j.enabled); chatLabels(); }).catch(() => {});
 const KIND_WORDS = [['flat', /flat|apartment|bhk|फ्ल्याट/], ['room', /room|kotha|कोठा/], ['shutter', /shutter|sutter|सटर|shop/], ['business', /business|office|commercial|hotel|restaurant|warehouse|व्यापार/], ['house', /house|ghar|घर|bungalow/], ['land', /land|jagga|जग्गा|plot|ropani|anna|aana/]];
+// Words that carry no question of their own. If nothing else is left after the type, place, budget and bedrooms
+// are taken out, the listings can answer the message without calling the AI.
+const FILLER = new Set(('i we you me my our us a an the is are am was be do does did have has had any some there here this that it its of to in at on for with and or ' +
+  'please pls kindly show find get give tell see search list want need looking look searching like would could can may will ' +
+  'price prices priced cost costs rate rates budget amount money rs npr rupees rupee under below upto up within less than max maximum about around ' +
+  'property properties listing listings place available availability one ones something anything what which where how much many kind type sale sell selling buy buying rent rental renting month monthly per ' +
+  'crore crores cr lakh lakhs lac lacs k thousand hajar anna aana ropani sqft sq ft bhk bed beds bedroom bedrooms ' +
+  'ma ko ka ki lai cha chha xa ho kati kun chahiyo chaiyo chahiyeko khojdai khojeko dekhau dekhaunu malai hajur sir dai didi bhai bhada kinna bikri ' +
+  'छ मा को का कति चाहियो मलाई देखाउनुस् भाडा किन्न बिक्री सम्म').split(' '));
+const GREET = /^(hi+|hello+|hey+|namaste|namaskar|नमस्ते|नमस्कार|good (morning|afternoon|evening))[\s!.,]*$/;
+const THANKS = /^(thanks?|thank you|thx|ok(ay)?|dhanyabad|धन्यवाद|great|nice|good|fine)[\s!.,]*$/;
+const CONTACT_Q = /\b(contact|phone|number|call|whatsapp|viber|owner|agent|broker|meet|visit|appointment|sampark|सम्पर्क)\b/;
+const flat = t => String(t).replace(/ /g, ' ');
 function findListings(q) {
   const s = ' ' + String(q).toLowerCase() + ' ';
   const w = {};
@@ -1478,27 +1491,82 @@ function findListings(q) {
   const rentish = w.deal === 'rent' || (!w.deal && (w.kind === 'room' || w.kind === 'shutter'));
   const money = m ? parseMoney(m[1] || m[2] || m[3], rentish) : null;
   w.max = money ? money.value : 0;
+  w.sort = /\b(cheap|cheapest|lowest|sasto|sasta|सस्तो)\b/.test(s) ? 'low' : /\b(newest|latest|recent|naya|नयाँ)\b/.test(s) ? 'new' : '';
   if (!w.deal && w.max) w.deal = w.max < 5e5 ? 'rent' : 'sale';
-  if (!w.kind && !w.deal && !w.place && !w.beds && !w.max) return null;
+  if (!w.kind && !w.deal && !w.place && !w.beds && !w.max && !w.sort) return null;
   let arr = shown().filter(l => l.status === 'available' && (!w.kind || kindOf(catOf(l.type)) === w.kind) && (!w.deal || l.deal === w.deal) &&
     (!w.place || placeName(l) === w.place) && (!w.beds || bedsOf(l) >= w.beds) && (!w.max || (l.price > 0 && l.price <= w.max * 1.05)));
-  if (w.max) arr = arr.slice().sort((a, b) => b.price - a.price);
+  if (w.sort === 'low') arr = arr.slice().sort((x, y) => (x.price || Infinity) - (y.price || Infinity));
+  else if (w.max) arr = arr.slice().sort((x, y) => y.price - x.price);
   const what = (w.beds ? w.beds + '+ bedroom ' : '') + (w.kind ? (w.kind === 'business' ? 'commercial properties' : w.kind === 'land' ? 'land' : KIND_NAMES[w.kind].toLowerCase() + 's') : 'properties');
-  w.words = what + (w.deal ? (w.deal === 'rent' ? ' for rent' : ' for sale') : '') + (w.place ? ' in ' + w.place : '') + (w.max ? ' up to ' + fmtNPR(w.max).replace(/\u00a0/g, ' ') + (w.deal === 'rent' ? ' a month' : '') : '');
-  return { want: w, items: arr };
+  w.words = what + (w.deal ? (w.deal === 'rent' ? ' for rent' : ' for sale') : '') + (w.place ? ' in ' + w.place : '') + (w.max ? ' up to ' + flat(fmtNPR(w.max)) + (w.deal === 'rent' ? ' a month' : '') : '');
+  // What is left of the message once everything understood above is taken out.
+  let left = s;
+  if (m) left = left.replace(m[0], ' ');
+  if (w.place) left = left.split(w.place.toLowerCase()).join(' ');
+  const rest = (left.match(/[a-zऀ-ॿ]+/g) || []).filter(t => !FILLER.has(t) && !KIND_WORDS.some(k => k[1].test(t)) && !/^(cheap|cheapest|lowest|sasto|sasta|newest|latest|recent|naya|lands|houses|flats|rooms|shutters|plots|offices|shops)$/.test(t));
+  return { want: w, items: arr, rest: rest };
 }
-function localAnswer(q) {
+const HELP_TEXT = 'I can look up the properties here by type, place and budget. Try “land under 1 crore in Sanepa”, “2 BHK flat for rent” or “room in Kupondole”. For anything else, press Contact.';
+const sayOne = l => l.title + ' at ' + flat(priceText(l));
+// When a budget is being compared, the total price is the number that matters, not the price per Anna.
+const sayTotal = l => l.title + ' at ' + flat(fmtNPR(l.price)) + (l.deal === 'rent' ? ' a month' : '');
+// Answers from the listings alone, in full sentences. When nothing fits, it offers the nearest thing instead of a dead end.
+function localAnswer(q, f) {
+  f = f || findListings(q);
+  if (!f) return { text: HELP_TEXT, ids: [] };
+  const w = f.want, items = f.items, n = items.length, ids = arr => arr.slice(0, 5).map(l => l.id);
+  if (n) {
+    const priced = items.filter(l => l.price > 0), oneDeal = priced.every(l => l.deal === priced[0].deal);
+    let t = (n === 1 ? 'Yes, there is 1 match for ' : 'Yes, there are ' + n + ' matches for ') + w.words + '. ';
+    if (n === 1) t += 'It is ' + (w.max ? sayTotal(items[0]) : sayOne(items[0])) + '.';
+    else if (w.sort === 'low' && priced.length) t += 'The lowest price is ' + sayOne(priced[0]) + '.';
+    else if (w.max && priced.length) t += 'The closest to your budget is ' + sayTotal(priced[0]) + '.';
+    else if (priced.length > 1 && oneDeal) {
+      const lo = Math.min.apply(null, priced.map(l => l.price)), hi = Math.max.apply(null, priced.map(l => l.price));
+      t += lo === hi ? 'They are all ' + flat(fmtNPR(lo)) + '.' : 'Prices go from ' + flat(fmtNPR(lo)) + ' to ' + flat(fmtNPR(hi)) + (priced[0].deal === 'rent' ? ' a month.' : '.');
+    }
+    return { text: t + (n > 5 ? ' Here are 5 of them.' : '') + (n === 1 ? ' Tap it to open it.' : ' Tap one to open it.'), ids: ids(items), local: true };
+  }
+  const pool = shown().filter(l => l.status === 'available' && (!w.kind || kindOf(catOf(l.type)) === w.kind) && (!w.deal || l.deal === w.deal) && (!w.beds || bedsOf(l) >= w.beds));
+  if (w.max) {
+    const over = pool.filter(l => (!w.place || placeName(l) === w.place) && l.price > w.max).sort((x, y) => x.price - y.price);
+    if (over.length) return { text: 'Nothing ' + (w.place ? 'in ' + w.place + ' ' : '') + 'fits ' + flat(fmtNPR(w.max)) + (w.deal === 'rent' ? ' a month' : '') + ' right now. The lowest is ' + sayTotal(over[0]) + ', which is ' + flat(fmtNPR(over[0].price - w.max)) + ' more. It is worth asking if the price can come down.', ids: ids(over.slice(0, 3)), local: true };
+  }
+  if (w.place) {
+    const other = pool.filter(l => !w.max || (l.price > 0 && l.price <= w.max * 1.05));
+    if (other.length) return { text: 'There is nothing like that in ' + w.place + ' right now. ' + (other.length === 1 ? 'There is 1 in another place.' : 'There are ' + other.length + ' in other places.') + ' Tap one to open it.', ids: ids(other), local: true };
+  }
+  return { text: 'Nothing listed right now matches ' + w.words + '. Press Contact and the owner can tell you what is coming up.', ids: [], local: true };
+}
+// Messages that need no AI at all: a greeting, a thank-you, how to reach the owner, and any search the listings fully answer.
+function quickAnswer(q) {
+  const s = q.trim().toLowerCase();
+  if (GREET.test(s)) return { text: 'Namaste. Tell me what you are looking for: the kind of property, the place and your budget.', ids: [] };
+  if (THANKS.test(s)) return { text: 'You are welcome. Ask me anything else about the properties, or press Contact to reach the owner.', ids: [] };
   const f = findListings(q);
-  if (!f) return { text: 'I can look up the properties here by type, place and budget. Try “land under 1 crore in Sanepa”, “2 BHK flat for rent” or “room in Kupondole”. For anything else, press Contact.', ids: [] };
-  const n = f.items.length;
-  if (!n) return { text: 'Nothing listed right now matches ' + f.want.words + '. Press Contact and the owner can tell you what is coming up.', ids: [] };
-  return { text: 'I found ' + n + ' ' + (n === 1 ? 'match' : 'matches') + ' for ' + f.want.words + '.' + (n > 5 ? ' Here are 5 of them.' : '') + ' Tap one to open it.', ids: f.items.slice(0, 5).map(l => l.id) };
+  if (CONTACT_Q.test(s)) return { text: 'To talk to the owner or arrange a visit, press “Contact the owner” below.' + (f && f.items.length ? ' These match what you mentioned.' : ''), ids: f ? f.items.slice(0, 3).map(l => l.id) : [] };
+  if (f && !f.rest.length) return localAnswer(q, f);
+  return null;
 }
+// Each phone or computer gets a fair share of AI answers per day, so one visitor cannot use up the free quota for everyone.
+const AI_PER_DAY = CFG.AI_PER_DAY > 0 ? CFG.AI_PER_DAY : 15;
+function aiLeft(use) {
+  try {
+    const today = dayKey(new Date());
+    let v = JSON.parse(localStorage.getItem('gjm_ai') || 'null');
+    if (!v || v.d !== today) v = { d: today, n: 0 };
+    if (v.n >= AI_PER_DAY) return false;
+    if (use) { v.n++; localStorage.setItem('gjm_ai', JSON.stringify(v)); }
+    return true;
+  } catch (e) { return true; }
+}
+chat.cache = new Map();
 function renderChat() {
   const log = $('#chatLog');
   log.innerHTML = chat.msgs.map(m => '<div class="msg ' + (m.role === 'bot' ? 'bot' : 'me') + '"><p>' + esc(m.text) + '</p>' +
     (m.ids && m.ids.length ? '<div class="mres">' + m.ids.map(id => { const l = byId(id); return l ? '<button class="btn small" type="button" data-view="' + esc(id) + '"><b>' + esc(l.title) + '</b><span>' + esc(compactPrice(l)) + (placeName(l) !== 'Other' ? ' · ' + esc(placeName(l)) : '') + '</span></button>' : ''; }).join('') + '</div>' : '') +
-    (m.ai ? '<small>Written by AI. It can make mistakes, so confirm the details with the owner.</small>' : '') + '</div>').join('') +
+    (m.ai ? '<small>Written by AI. It can make mistakes, so confirm the details with the owner.</small>' : m.local ? '<small>Found in the listings on this site.</small>' : '') + '</div>').join('') +
     (chat.busy ? '<div class="msg bot wait"><p>Looking…</p></div>' : '') +
     '<div class="row"><button class="btn small" type="button" data-contact>Contact the owner</button></div>';
   log.scrollTop = log.scrollHeight;
@@ -1511,11 +1579,16 @@ function openChat() {
 async function ask(q) {
   chat.msgs.push({ role: 'me', text: q });
   chat.busy = true; renderChat();
-  let out = null;
-  if (chat.ai) {
+  // 1. The listings answer it by themselves when the message is a plain search. No AI call is spent.
+  let out = quickAnswer(q);
+  const key = q.trim().toLowerCase().replace(/\s+/g, ' ');
+  // 2. The same question asked again gets the answer it got before.
+  if (!out && chat.cache.has(key)) out = chat.cache.get(key);
+  // 3. Everything else goes to the AI, if it is connected and this visitor still has answers left today.
+  if (!out && chat.ai && aiLeft(true)) {
     try {
       const rows = shown().filter(l => l.status === 'available').slice(0, 60).map(l => ({
-        title: l.title, kind: headline(l), price: priceText(l).replace(/\u00a0/g, ' '), size: areaText(l), place: placeLine(l),
+        title: l.title, kind: headline(l), price: flat(priceText(l)), size: areaText(l), place: placeLine(l),
         facts: cardFacts(l).concat(featuresOf(l)).join(', '), notes: String(l.desc || '').slice(0, 200)
       }));
       const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1526,13 +1599,14 @@ async function ask(q) {
         let ids = shown().filter(l => l.title.length > 5 && low.indexOf(l.title.toLowerCase()) >= 0).slice(0, 5).map(l => l.id);
         if (!ids.length) { const f = findListings(q); if (f) ids = f.items.slice(0, 3).map(l => l.id); }
         out = { text: j.text, ids: ids, ai: true };
+        chat.cache.set(key, out);
       }
     } catch (e) {}
   }
-  // No AI key yet, or the AI did not answer: the built-in search answers.
+  // 4. No AI key, the limit is reached, or the AI did not answer: the listings answer as well as they can.
   if (!out) out = localAnswer(q);
   chat.busy = false;
-  chat.msgs.push({ role: 'bot', text: out.text, ids: out.ids, ai: !!out.ai });
+  chat.msgs.push({ role: 'bot', text: out.text, ids: out.ids, ai: !!out.ai, local: !!out.local });
   if (chat.msgs.length > 40) chat.msgs = chat.msgs.slice(-40);
   renderChat();
 }
