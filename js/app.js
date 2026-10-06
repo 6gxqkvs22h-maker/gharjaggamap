@@ -127,6 +127,10 @@ const KINDS = {
   }
 };
 const KIND_NAMES = { land: 'Land', house: 'House', business: 'Business', shutter: 'Shutter', room: 'Room', flat: 'Flat' };
+const KIND_NE = { land: 'जग्गा', house: 'घर', business: 'व्यावसायिक सम्पत्ति', shutter: 'सटर', room: 'कोठा', flat: 'फ्ल्याट' };
+// English is the default. siteLang() is 'ne' when the visitor switched the buttons and labels to Nepali (js/i18n.js).
+const siteLang = () => window.GJ ? GJ.lang() : 'en';
+const nepMoney = s => window.GJ ? GJ.money(s) : s;
 const STATUSES = ['available', 'sold', 'rented', 'unavailable'];
 const STATUS_WORD = { available: 'Available', sold: 'Sold', rented: 'Rented', unavailable: 'Unavailable' };
 
@@ -896,32 +900,44 @@ function explainBudget(b) {
   const near = pool.filter(l => l.price > b.value && l.price <= b.value * 1.15).sort((a, c) => a.price - c.price);
   const lines = [];
   const pu = l => { const t = rateText(l); return t ? ' (' + t + ')' : ''; };
+  const ne = siteLang() === 'ne';
+  const whereNe = plc ? placeName(plc) + ' मा ' : '';
+  const nounNe = (rent ? 'भाडाका ' : 'बिक्रीका ') + (cat ? GJ.t(catName(cat)) : 'सम्पत्ति');
   if (!pool.length) {
-    lines.push('There are no ' + word + where + ' with a price listed here right now.');
-    lines.push('Contact me and I will tell you what is coming up.');
+    lines.push(ne ? whereNe + nounNe + ' अहिले मूल्य सहित सूचीमा छैन।' : 'There are no ' + word + where + ' with a price listed here right now.');
+    lines.push(ne ? 'सम्पर्क गर्नुहोस्, के आउँदैछ म बताइदिन्छु।' : 'Contact me and I will tell you what is coming up.');
   } else if (fits.length) {
-    lines.push('With ' + money(b.value) + ' you can afford ' + fits.length + ' of the ' + pool.length + ' ' + word + where + '.');
+    lines.push(ne ? money(b.value) + ' बजेटमा ' + whereNe + nounNe + ' ' + pool.length + ' वटामध्ये ' + fits.length + ' वटा तपाईंको बजेटभित्र पर्छन्।'
+      : 'With ' + money(b.value) + ' you can afford ' + fits.length + ' of the ' + pool.length + ' ' + word + where + '.');
     const top = fits[0], left = b.value - top.price;
-    lines.push('Closest to your budget: ' + top.title + ' at ' + money(top.price) + pu(top) + '. ' +
+    lines.push(ne ? 'तपाईंको बजेटसँग सबैभन्दा नजिक: ' + top.title + ', ' + money(top.price) + pu(top) + '। ' +
+        (rent ? (left > 0 ? 'यो तपाईंको बजेटभन्दा ' + fmtNPR(left) + ' प्रति महिना कम हो।' : 'यसले तपाईंको सम्पूर्ण बजेट लिन्छ।')
+          : (left >= 1e5 ? 'दर्ता, शुल्क र सरसामानका लागि तपाईंसँग करिब ' + fmtNPR(left) + ' बाँकी रहन्छ।' : 'यसले लगभग सबै बजेट लिन्छ, त्यसैले दर्ता र शुल्कका लागि थप पैसा राख्नुहोस्।'))
+      : 'Closest to your budget: ' + top.title + ' at ' + money(top.price) + pu(top) + '. ' +
       (rent ? (left > 0 ? 'That is ' + fmtNPR(left) + ' a month under your budget.' : 'That uses all of your budget.')
         : (left >= 1e5 ? 'You keep about ' + fmtNPR(left) + ' for registration, fees and moving.' : 'That uses almost all of your budget, so plan extra money for registration and fees.')));
-    if (fits.length > 1) { const low = fits[fits.length - 1]; lines.push('Lowest price that fits: ' + low.title + ' at ' + money(low.price) + pu(low) + '.'); }
+    if (fits.length > 1) { const low = fits[fits.length - 1]; lines.push(ne ? 'बजेटभित्र सबैभन्दा सस्तो: ' + low.title + ', ' + money(low.price) + pu(low) + '।' : 'Lowest price that fits: ' + low.title + ' at ' + money(low.price) + pu(low) + '.'); }
   } else {
     const cheap = pool.slice().sort((a, c) => a.price - c.price)[0];
-    lines.push('Nothing listed' + where + ' fits ' + money(b.value) + ' yet.');
-    lines.push('The lowest price is ' + cheap.title + ' at ' + money(cheap.price) + '. That is ' + fmtNPR(cheap.price - b.value) + ' more than your budget.');
+    lines.push(ne ? whereNe + money(b.value) + ' मा अहिले केही मिल्दैन।' : 'Nothing listed' + where + ' fits ' + money(b.value) + ' yet.');
+    lines.push(ne ? 'सबैभन्दा सस्तो ' + cheap.title + ', ' + money(cheap.price) + ' हो। यो तपाईंको बजेटभन्दा ' + fmtNPR(cheap.price - b.value) + ' बढी हो।'
+      : 'The lowest price is ' + cheap.title + ' at ' + money(cheap.price) + '. That is ' + fmtNPR(cheap.price - b.value) + ' more than your budget.');
   }
   if (near.length) {
     const n = near[0];
-    lines.push((near.length === 1 ? 'One more is' : near.length + ' more are') + ' just above your budget. ' + n.title + ' costs ' + money(n.price) + ', which is ' + fmtNPR(n.price - b.value) + ' more. It is worth asking if the price can come down.');
+    lines.push(ne ? (near.length === 1 ? 'अर्को १ वटा' : near.length + ' वटा अरू') + ' बजेटभन्दा अलि माथि छन्। ' + n.title + ' को मूल्य ' + money(n.price) + ' हो, जुन ' + fmtNPR(n.price - b.value) + ' बढी हो। मूल्य घटाउन मिल्छ कि सोध्न लायक छ।'
+      : (near.length === 1 ? 'One more is' : near.length + ' more are') + ' just above your budget. ' + n.title + ' costs ' + money(n.price) + ', which is ' + fmtNPR(n.price - b.value) + ' more. It is worth asking if the price can come down.');
   }
   if (!rent && (!cat || kindOf(cat) === 'land')) {
     placeGroups().filter(p => p.landRate && (!filter.place || p.key === filter.place)).slice(0, 3).forEach(p => {
-      lines.push('In ' + p.name + ', land is about ' + fmtNPR(p.landRate.v) + ' per ' + p.landRate.label + '. Your budget buys about ' + trimNum(Math.round(b.value / p.landRate.v * 10) / 10) + ' ' + p.landRate.label + ' there.');
+      const nb = trimNum(Math.round(b.value / p.landRate.v * 10) / 10);
+      lines.push(ne ? p.name + ' मा जग्गा करिब ' + fmtNPR(p.landRate.v) + ' प्रति ' + p.landRate.label + ' पर्छ। तपाईंको बजेटले त्यहाँ करिब ' + nb + ' ' + p.landRate.label + ' किन्न सकिन्छ।'
+        : 'In ' + p.name + ', land is about ' + fmtNPR(p.landRate.v) + ' per ' + p.landRate.label + '. Your budget buys about ' + nb + ' ' + p.landRate.label + ' there.');
     });
   }
-  if (b.assumed) lines.push('You typed a small number, so it was read as ' + money(b.value) + '.');
-  lines.push(rent ? 'Ask me about the deposit and what the rent includes.' : 'These are asking prices. Contact me before you decide.');
+  if (b.assumed) lines.push(ne ? 'तपाईंले सानो संख्या लेख्नुभयो, त्यसैले ' + money(b.value) + ' पढिएको छ।' : 'You typed a small number, so it was read as ' + money(b.value) + '.');
+  lines.push(rent ? (ne ? 'डिपोजिट र भाडामा के-के समावेश छ भनेर सोध्नुहोस्।' : 'Ask me about the deposit and what the rent includes.')
+    : (ne ? 'यी माग गरिएका मूल्य हुन्। निर्णय गर्नुअघि सम्पर्क गर्नुहोस्।' : 'These are asking prices. Contact me before you decide.'));
   return { lines, fits, near };
 }
 function runBudget() {
@@ -930,7 +946,7 @@ function runBudget() {
   budgetIds = new Set(r.fits.concat(r.near).map(l => l.id));
   const box = $('#budgetText');
   box.textContent = '';
-  r.lines.forEach((t, i) => { const p = document.createElement('p'); if (i === 0) p.className = 'lead'; p.textContent = t; box.appendChild(p); });
+  r.lines.forEach((t, i) => { const p = document.createElement('p'); if (i === 0) p.className = 'lead'; p.textContent = siteLang() === 'ne' ? nepMoney(t) : t; box.appendChild(p); });
   $('#budgetOut').hidden = false;
   $('#aiBox').hidden = !aiOn;
   resetAi();
@@ -1138,8 +1154,10 @@ function shareLink(l, btn) {
 }
 function openContact(id) {
   const l = id ? byId(id) : null, s = state.site;
-  const msg = l ? 'Hello, I saw "' + l.title + '" (' + priceText(l).replace(/ /g, ' ') + ') on ' + (s.name || DEF_SITE.name) + '. Is it still available? Please send me the details. ' + listingUrl(l.id)
-    : 'Hello, I am looking at ' + (s.name || DEF_SITE.name) + ' and would like to know more.';
+  const ne = siteLang() === 'ne', NB = /\u00a0/g;
+  const msg = l ? (ne ? 'नमस्ते, मैले ' + (s.name || DEF_SITE.name) + ' मा "' + l.title + '" (' + nepMoney(priceText(l).replace(NB, ' ')) + ') देखें। के यो अझै उपलब्ध छ? कृपया विवरण पठाइदिनुहोला। ' + listingUrl(l.id)
+      : 'Hello, I saw "' + l.title + '" (' + priceText(l).replace(NB, ' ') + ') on ' + (s.name || DEF_SITE.name) + '. Is it still available? Please send me the details. ' + listingUrl(l.id))
+    : (ne ? 'नमस्ते, म ' + (s.name || DEF_SITE.name) + ' हेर्दैछु र थप जान्न चाहन्छु।' : 'Hello, I am looking at ' + (s.name || DEF_SITE.name) + ' and would like to know more.');
   $('#contactH').textContent = s.owner ? 'Contact ' + s.owner : 'Contact';
   const links = [];
   const wa = waUrl(s.whatsapp, msg);
@@ -1465,22 +1483,35 @@ function chatLabels() {
 }
 chatLabels();
 fetch('/api/chat').then(r => r.ok ? r.json() : null).then(j => { chat.ai = !!(j && j.enabled); chatLabels(); }).catch(() => {});
-const KIND_WORDS = [['flat', /flat|apartment|bhk|फ्ल्याट/], ['room', /room|kotha|कोठा/], ['shutter', /shutter|sutter|सटर|shop/], ['business', /business|office|commercial|hotel|restaurant|warehouse|व्यापार/], ['house', /house|ghar|घर|bungalow/], ['land', /land|jagga|जग्गा|plot|ropani|anna|aana/]];
+const KIND_WORDS = [['flat', /\b(flats?|apartments?|bhk)\b|फ्ल्याट/], ['room', /\b(rooms?|kotha)\b|कोठा/], ['shutter', /\b(shutters?|sutters?|shops?|pasal)\b|सटर|पसल/],
+  ['business', /\b(business(?:es)?|offices?|commercial|hotels?|restaurants?|warehouses?|byapar)\b|व्यापार|व्यवसाय/], ['house', /\b(houses?|ghar|bungalows?|homes?)\b|घर/],
+  ['land', /\b(lands?|jagga|plots?|ropani|anna|aana)\b|जग्गा|रोपनी|आना/]];
+// Common Kathmandu places written in Nepali, so a question in Nepali finds the same listings.
+const PLACES_NE = { 'new baneshwor': 'नयाँ बानेश्वर', baneshwor: 'बानेश्वर', sanepa: 'सानेपा', kupondole: 'कुपण्डोल', thamel: 'ठमेल', boudha: 'बौद्ध', bhaisepati: 'भैसेपाटी', imadol: 'इमाडोल',
+  balkumari: 'बल्कुमारी', koteshwor: 'कोटेश्वर', tinkune: 'तिनकुने', chabahil: 'चाबहिल', maharajgunj: 'महाराजगञ्ज', budhanilkantha: 'बुढानीलकण्ठ', kalanki: 'कलंकी',
+  kirtipur: 'कीर्तिपुर', lalitpur: 'ललितपुर', patan: 'पाटन', jawalakhel: 'जावलाखेल', jhamsikhel: 'झम्सिखेल', lazimpat: 'लाजिम्पाट', baluwatar: 'बालुवाटार',
+  dillibazar: 'दिल्लीबजार', gongabu: 'गोङ्गबु', kapan: 'कपन', gokarneshwor: 'गोकर्णेश्वर', tokha: 'टोखा', nayabazar: 'नयाँबजार', swayambhu: 'स्वयम्भू',
+  thankot: 'थानकोट', satdobato: 'सातदोबाटो', gwarko: 'ग्वार्को', godawari: 'गोदावरी', ekantakuna: 'एकान्तकुना', thapathali: 'थापाथली', sinamangal: 'सिनामंगल',
+  gaushala: 'गौशाला', pepsicola: 'पेप्सिकोला', sitapaila: 'सीतापाइला', 'new road': 'न्युरोड', 'ring road': 'चक्रपथ', kathmandu: 'काठमाडौं' };
+const placeNe = n => PLACES_NE[String(n).toLowerCase()] || n;
 // Words that carry no question of their own. If nothing else is left after the type, place, budget and bedrooms
 // are taken out, the listings can answer the message without calling the AI.
 const FILLER = new Set(('i we you me my our us a an the is are am was be do does did have has had any some there here this that it its of to in at on for with and or ' +
   'please pls kindly show find get give tell see search list want need looking look searching like would could can may will ' +
   'price prices priced cost costs rate rates budget amount money rs npr rupees rupee under below upto up within less than max maximum about around ' +
   'property properties listing listings place available availability one ones something anything what which where how much many kind type sale sell selling buy buying rent rental renting month monthly per ' +
-  'crore crores cr lakh lakhs lac lacs k thousand hajar anna aana ropani sqft sq ft bhk bed beds bedroom bedrooms ' +
+  'crore crores cr lakh lakhs lac lacs k thousand hajar anna aana ropani sqft sq ft bhk bed beds bedroom bedrooms all every everything ' +
   'ma ko ka ki lai cha chha xa ho kati kun chahiyo chaiyo chahiyeko khojdai khojeko dekhau dekhaunu malai hajur sir dai didi bhai bhada kinna bikri ' +
-  'छ मा को का कति चाहियो मलाई देखाउनुस् भाडा किन्न बिक्री सम्म').split(' '));
-const GREET = /^(hi+|hello+|hey+|namaste|namaskar|नमस्ते|नमस्कार|good (morning|afternoon|evening))[\s!.,]*$/;
-const THANKS = /^(thanks?|thank you|thx|ok(ay)?|dhanyabad|धन्यवाद|great|nice|good|fine)[\s!.,]*$/;
-const CONTACT_Q = /\b(contact|phone|number|call|whatsapp|viber|owner|agent|broker|meet|visit|appointment|sampark|सम्पर्क)\b/;
-const flat = t => String(t).replace(/ /g, ' ');
+  'छ मा को का कि कति चाहियो चाहिन्छ मलाई देखाउनुस् देखाउनुहोस् भाडा किन्न बिक्री सम्म सम्मको सम्मका भित्र भित्रको भित्रका छन् हुन्छ हो के र वा तपाईंसँग तपाईं मेरो म हामी कृपया खोज्दै खोजिदिनुहोस् चाहन्छु सबै जम्मा वटा ' +
+  'लाख करोड हजार').split(' '));
+const GREET = /^(hi+|hello+|hey+|namaste|namaskar|नमस्ते|नमस्कार|good (morning|afternoon|evening))[\s!.,।]*$/;
+const THANKS = /^(thanks?|thank you|thx|ok(ay)?|dhanyabad|धन्यवाद|great|nice|good|fine|राम्रो|हुन्छ)[\s!.,।]*$/;
+const CONTACT_Q = /\b(contact|phone|number|call|whatsapp|viber|owner|agent|broker|meet|visit|appointment|sampark)\b|सम्पर्क|फोन नम्बर/;
+const flat = t => String(t).replace(/\u00a0/g, ' ');
+const D2A = '०१२३४५६७८९';
 function findListings(q) {
-  const s = ' ' + String(q).toLowerCase() + ' ';
+  let s = ' ' + String(q).toLowerCase().replace(/[०-९]/g, d => D2A.indexOf(d)) + ' ';
+  Object.keys(PLACES_NE).forEach(k => { const d = PLACES_NE[k]; if (s.indexOf(d) >= 0) s = s.split(d).join(' ' + k + ' '); });
   const w = {};
   if (/rent|bhada|भाडा|kiraya|per month|monthly/.test(s)) w.deal = 'rent'; else if (/\bbuy|\bsale|\bsell|kinna|किन्न|bikri|बिक्री|purchase/.test(s)) w.deal = 'sale';
   w.kind = (KIND_WORDS.find(k => k[1].test(s)) || [])[0] || '';
@@ -1491,7 +1522,7 @@ function findListings(q) {
   const rentish = w.deal === 'rent' || (!w.deal && (w.kind === 'room' || w.kind === 'shutter'));
   const money = m ? parseMoney(m[1] || m[2] || m[3], rentish) : null;
   w.max = money ? money.value : 0;
-  w.sort = /\b(cheap|cheapest|lowest|sasto|sasta|सस्तो)\b/.test(s) ? 'low' : /\b(newest|latest|recent|naya|नयाँ)\b/.test(s) ? 'new' : '';
+  w.sort = /\b(cheap|cheapest|lowest|sasto|sasta)\b|सस्तो/.test(s) ? 'low' : /\b(newest|latest|recent|naya)\b|नयाँ/.test(s) ? 'new' : '';
   if (!w.deal && w.max) w.deal = w.max < 5e5 ? 'rent' : 'sale';
   if (!w.kind && !w.deal && !w.place && !w.beds && !w.max && !w.sort) return null;
   let arr = shown().filter(l => l.status === 'available' && (!w.kind || kindOf(catOf(l.type)) === w.kind) && (!w.deal || l.deal === w.deal) &&
@@ -1500,53 +1531,81 @@ function findListings(q) {
   else if (w.max) arr = arr.slice().sort((x, y) => y.price - x.price);
   const what = (w.beds ? w.beds + '+ bedroom ' : '') + (w.kind ? (w.kind === 'business' ? 'commercial properties' : w.kind === 'land' ? 'land' : KIND_NAMES[w.kind].toLowerCase() + 's') : 'properties');
   w.words = what + (w.deal ? (w.deal === 'rent' ? ' for rent' : ' for sale') : '') + (w.place ? ' in ' + w.place : '') + (w.max ? ' up to ' + flat(fmtNPR(w.max)) + (w.deal === 'rent' ? ' a month' : '') : '');
+  // The same thing said in Nepali: "सानेपा मा Rs. 1 crore सम्मको जग्गा बिक्रीमा".
+  w.wordsNe = (w.place ? placeNe(w.place) + ' मा ' : '') + (w.max ? flat(fmtNPR(w.max)) + (w.deal === 'rent' ? ' प्रति महिना' : '') + ' सम्मको ' : '') + (w.beds ? w.beds + '+ बेडरूमको ' : '') +
+    (w.kind ? KIND_NE[w.kind] : 'सम्पत्ति') + (w.deal ? (w.deal === 'rent' ? ' भाडामा' : ' बिक्रीमा') : '');
   // What is left of the message once everything understood above is taken out.
   let left = s;
   if (m) left = left.replace(m[0], ' ');
   if (w.place) left = left.split(w.place.toLowerCase()).join(' ');
-  const rest = (left.match(/[a-zऀ-ॿ]+/g) || []).filter(t => !FILLER.has(t) && !KIND_WORDS.some(k => k[1].test(t)) && !/^(cheap|cheapest|lowest|sasto|sasta|newest|latest|recent|naya|lands|houses|flats|rooms|shutters|plots|offices|shops)$/.test(t));
+  const rest = (left.match(/[a-zऀ-ॿ]+/g) || []).filter(t => !FILLER.has(t) && !KIND_WORDS.some(k => k[1].test(t)) && !/^(cheap|cheapest|lowest|sasto|sasta|newest|latest|recent|naya|lands|houses|flats|rooms|shutters|plots|offices|shops|सस्तो|नयाँ)$/.test(t));
   return { want: w, items: arr, rest: rest };
 }
-const HELP_TEXT = 'I can look up the properties here by type, place and budget. Try “land under 1 crore in Sanepa”, “2 BHK flat for rent” or “room in Kupondole”. For anything else, press Contact.';
-const sayOne = l => l.title + ' at ' + flat(priceText(l));
+// The language a chat answer is written in: the site language, or Nepali when the visitor wrote in Nepali letters.
+// The chat and the AI always answer in English. Only the buttons and labels of the site switch to Nepali.
+const chatLang = () => 'en';
+const Q = (lg, en, ne) => lg === 'ne' ? ne : en;
+const HELP_TEXT = { en: 'I can look up the properties here by type, place and budget. Try “land under 1 crore in Sanepa”, “2 BHK flat for rent” or “room in Kupondole”. For anything else, press Contact.',
+  ne: 'म यहाँका सम्पत्ति प्रकार, ठाउँ र बजेटअनुसार खोज्न सक्छु। यस्तो लेखेर हेर्नुहोस्: “सानेपामा १ करोडभित्रको जग्गा”, “२ BHK फ्ल्याट भाडामा” वा “कुपण्डोलमा कोठा”। अरू कुराका लागि “सम्पर्क” थिच्नुहोस्।' };
+const sayOne = (l, lg) => lg === 'ne' ? l.title + ', ' + flat(priceText(l)) : l.title + ' at ' + flat(priceText(l));
 // When a budget is being compared, the total price is the number that matters, not the price per Anna.
-const sayTotal = l => l.title + ' at ' + flat(fmtNPR(l.price)) + (l.deal === 'rent' ? ' a month' : '');
+const sayTotal = (l, lg) => (lg === 'ne' ? l.title + ', ' : l.title + ' at ') + flat(fmtNPR(l.price)) + (l.deal === 'rent' ? (lg === 'ne' ? ' प्रति महिना' : ' a month') : '');
 // Answers from the listings alone, in full sentences. When nothing fits, it offers the nearest thing instead of a dead end.
-function localAnswer(q, f) {
+function localAnswer(q, f, lg) {
+  lg = lg || chatLang(q);
   f = f || findListings(q);
-  if (!f) return { text: HELP_TEXT, ids: [] };
-  const w = f.want, items = f.items, n = items.length, ids = arr => arr.slice(0, 5).map(l => l.id);
+  if (!f) return { text: HELP_TEXT[lg], ids: [] };
+  const w = f.want, items = f.items, n = items.length, ids = arr => arr.slice(0, 5).map(l => l.id), ne = lg === 'ne', words = ne ? w.wordsNe : w.words;
   if (n) {
     const priced = items.filter(l => l.price > 0), oneDeal = priced.every(l => l.deal === priced[0].deal);
-    let t = (n === 1 ? 'Yes, there is 1 match for ' : 'Yes, there are ' + n + ' matches for ') + w.words + '. ';
-    if (n === 1) t += 'It is ' + (w.max ? sayTotal(items[0]) : sayOne(items[0])) + '.';
-    else if (w.sort === 'low' && priced.length) t += 'The lowest price is ' + sayOne(priced[0]) + '.';
-    else if (w.max && priced.length) t += 'The closest to your budget is ' + sayTotal(priced[0]) + '.';
+    let t = ne ? 'हो, ' + words + ' का लागि ' + (n === 1 ? '१ वटा' : n + ' वटा') + (n === 1 ? ' मिल्छ। ' : ' मिल्छन्। ')
+      : (n === 1 ? 'Yes, there is 1 match for ' : 'Yes, there are ' + n + ' matches for ') + words + '. ';
+    if (n === 1) t += ne ? 'यो ' + (w.max ? sayTotal(items[0], lg) : sayOne(items[0], lg)) + ' हो।' : 'It is ' + (w.max ? sayTotal(items[0], lg) : sayOne(items[0], lg)) + '.';
+    else if (w.sort === 'low' && priced.length) t += ne ? 'सबैभन्दा सस्तो ' + sayOne(priced[0], lg) + ' हो।' : 'The lowest price is ' + sayOne(priced[0], lg) + '.';
+    else if (w.max && priced.length) t += ne ? 'तपाईंको बजेटसँग सबैभन्दा नजिक ' + sayTotal(priced[0], lg) + ' हो।' : 'The closest to your budget is ' + sayTotal(priced[0], lg) + '.';
     else if (priced.length > 1 && oneDeal) {
       const lo = Math.min.apply(null, priced.map(l => l.price)), hi = Math.max.apply(null, priced.map(l => l.price));
-      t += lo === hi ? 'They are all ' + flat(fmtNPR(lo)) + '.' : 'Prices go from ' + flat(fmtNPR(lo)) + ' to ' + flat(fmtNPR(hi)) + (priced[0].deal === 'rent' ? ' a month.' : '.');
+      if (ne) t += lo === hi ? 'सबैको मूल्य ' + flat(fmtNPR(lo)) + ' हो।' : 'मूल्य ' + flat(fmtNPR(lo)) + ' देखि ' + flat(fmtNPR(hi)) + ' सम्म' + (priced[0].deal === 'rent' ? ' प्रति महिना' : '') + ' छ।';
+      else t += lo === hi ? 'They are all ' + flat(fmtNPR(lo)) + '.' : 'Prices go from ' + flat(fmtNPR(lo)) + ' to ' + flat(fmtNPR(hi)) + (priced[0].deal === 'rent' ? ' a month.' : '.');
     }
-    return { text: t + (n > 5 ? ' Here are 5 of them.' : '') + (n === 1 ? ' Tap it to open it.' : ' Tap one to open it.'), ids: ids(items), local: true };
+    return { text: t + (n > 5 ? (ne ? ' तीमध्ये ५ वटा यहाँ छन्।' : ' Here are 5 of them.') : '') + (ne ? (n === 1 ? ' खोल्न त्यसमा थिच्नुहोस्।' : ' खोल्न एउटामा थिच्नुहोस्।') : (n === 1 ? ' Tap it to open it.' : ' Tap one to open it.')), ids: ids(items), local: true };
   }
   const pool = shown().filter(l => l.status === 'available' && (!w.kind || kindOf(catOf(l.type)) === w.kind) && (!w.deal || l.deal === w.deal) && (!w.beds || bedsOf(l) >= w.beds));
   if (w.max) {
     const over = pool.filter(l => (!w.place || placeName(l) === w.place) && l.price > w.max).sort((x, y) => x.price - y.price);
-    if (over.length) return { text: 'Nothing ' + (w.place ? 'in ' + w.place + ' ' : '') + 'fits ' + flat(fmtNPR(w.max)) + (w.deal === 'rent' ? ' a month' : '') + ' right now. The lowest is ' + sayTotal(over[0]) + ', which is ' + flat(fmtNPR(over[0].price - w.max)) + ' more. It is worth asking if the price can come down.', ids: ids(over.slice(0, 3)), local: true };
+    if (over.length) return { text: ne
+      ? (w.place ? placeNe(w.place) + ' मा ' : '') + flat(fmtNPR(w.max)) + (w.deal === 'rent' ? ' प्रति महिना' : '') + ' मा अहिले केही मिल्दैन। सबैभन्दा सस्तो ' + sayTotal(over[0], lg) + ' हो, जुन ' + flat(fmtNPR(over[0].price - w.max)) + ' बढी हो। मूल्य घटाउन मिल्छ कि मालिकलाई सोध्न लायक छ।'
+      : 'Nothing ' + (w.place ? 'in ' + w.place + ' ' : '') + 'fits ' + flat(fmtNPR(w.max)) + (w.deal === 'rent' ? ' a month' : '') + ' right now. The lowest is ' + sayTotal(over[0], lg) + ', which is ' + flat(fmtNPR(over[0].price - w.max)) + ' more. It is worth asking if the price can come down.', ids: ids(over.slice(0, 3)), local: true };
   }
   if (w.place) {
     const other = pool.filter(l => !w.max || (l.price > 0 && l.price <= w.max * 1.05));
-    if (other.length) return { text: 'There is nothing like that in ' + w.place + ' right now. ' + (other.length === 1 ? 'There is 1 in another place.' : 'There are ' + other.length + ' in other places.') + ' Tap one to open it.', ids: ids(other), local: true };
+    if (other.length) return { text: ne
+      ? placeNe(w.place) + ' मा अहिले त्यस्तो केही छैन। ' + (other.length === 1 ? 'अर्को ठाउँमा १ वटा छ।' : 'अन्य ठाउँमा ' + other.length + ' वटा छन्।') + ' खोल्न एउटामा थिच्नुहोस्।'
+      : 'There is nothing like that in ' + w.place + ' right now. ' + (other.length === 1 ? 'There is 1 in another place.' : 'There are ' + other.length + ' in other places.') + ' Tap one to open it.', ids: ids(other), local: true };
   }
-  return { text: 'Nothing listed right now matches ' + w.words + '. Press Contact and the owner can tell you what is coming up.', ids: [], local: true };
+  return { text: ne ? words + ' सँग मिल्ने केही अहिले सूचीमा छैन। “सम्पर्क” थिच्नुहोस्, मालिकले के आउँदैछ भन्न सक्नुहुन्छ।'
+    : 'Nothing listed right now matches ' + words + '. Press Contact and the owner can tell you what is coming up.', ids: [], local: true };
 }
-// Messages that need no AI at all: a greeting, a thank-you, how to reach the owner, and any search the listings fully answer.
-function quickAnswer(q) {
-  const s = q.trim().toLowerCase();
-  if (GREET.test(s)) return { text: 'Namaste. Tell me what you are looking for: the kind of property, the place and your budget.', ids: [] };
-  if (THANKS.test(s)) return { text: 'You are welcome. Ask me anything else about the properties, or press Contact to reach the owner.', ids: [] };
+// Messages that need no AI at all: a greeting, a thank-you, how many properties there are, how to reach the owner, and any search the listings fully answer.
+function quickAnswer(q, lg) {
+  lg = lg || chatLang(q);
+  const s = q.trim().toLowerCase().replace(/[०-९]/g, d => D2A.indexOf(d)), ne = lg === 'ne';
+  if (GREET.test(s)) return { text: Q(lg, 'Namaste. Tell me what you are looking for: the kind of property, the place and your budget.', 'नमस्ते! तपाईं के खोज्दै हुनुहुन्छ भन्नुहोस्: सम्पत्तिको प्रकार, ठाउँ र बजेट।'), ids: [] };
+  if (THANKS.test(s)) return { text: Q(lg, 'You are welcome. Ask me anything else about the properties, or press Contact to reach the owner.', 'स्वागत छ! सम्पत्तिबारे अरू केही सोध्नुहोस्, वा मालिकसँग कुरा गर्न “सम्पर्क” थिच्नुहोस्।'), ids: [] };
+  const nm = /^(?:i am|i'm|im|my name is|this is|mero naam|mero nam)\s+([a-zऀ-ॿ]{2,20})[\s!.]*$/.exec(s) || /^(?:म|मेरो नाम)\s+([ऀ-ॿ]{2,20})(?:\s+(?:हुँ|हो))?[\s!।.]*$/.exec(s);
+  if (nm) { const nn = nm[1].charAt(0).toUpperCase() + nm[1].slice(1); return { text: ne ? 'नमस्ते ' + nn + '! तपाईं जग्गा, घर, फ्ल्याट, कोठा वा पसल के खोज्दै हुनुहुन्छ? ठाउँ र बजेट पनि भन्नुहोस्।' : 'Nice to meet you, ' + nn + '. What are you looking for: land, a house, a flat, a room or a shop? Tell me the place and your budget too.', ids: [] }; }
+  const asksCount = (/\b(how many|kati (?:wota|ota|vota)|total|count|what (?:do|properties|all)|everything|all properties|show all|list all)\b|कति|जम्मा/.test(s) && /\b(propert|listing|land|house|flat|room|shutter|shop|ghar|jagga|have|got|do you|all)|सम्पत्ति|जग्गा|घर|कोठा|फ्ल्याट|सटर|पसल|छन्|छ\b/.test(s) && !/\b(under|below|upto|within)\b|सम्म|भित्र/.test(s));
+  if (asksCount) {
+    const av = shown().filter(l => l.status === 'available'), by = {};
+    av.forEach(l => { const k = kindOf(catOf(l.type)); by[k] = (by[k] || 0) + 1; });
+    const parts = Object.keys(by).map(k => ne ? by[k] + ' ' + KIND_NE[k] : by[k] + ' ' + (k === 'business' ? 'commercial' : KIND_NAMES[k].toLowerCase()));
+    return { text: av.length ? (ne ? 'अहिले जम्मा ' + av.length + ' वटा सम्पत्ति उपलब्ध छन्' + (parts.length > 1 ? ': ' + parts.join(', ') : '') + '। प्रकार, ठाउँ र बजेट भन्नुहोस्, म सबैभन्दा मिल्ने खोजिदिन्छु।'
+      : 'There are ' + av.length + ' properties available right now' + (parts.length > 1 ? ': ' + parts.join(', ') : '') + '. Tell me the type, place and budget and I will find the best match.')
+      : Q(lg, 'There are no properties listed right now. Please check again soon.', 'अहिले कुनै सम्पत्ति सूचीमा छैन। केही समयपछि फेरि हेर्नुहोस्।'), ids: [], local: true };
+  }
   const f = findListings(q);
-  if (CONTACT_Q.test(s)) return { text: 'To talk to the owner or arrange a visit, press “Contact the owner” below.' + (f && f.items.length ? ' These match what you mentioned.' : ''), ids: f ? f.items.slice(0, 3).map(l => l.id) : [] };
-  if (f && !f.rest.length) return localAnswer(q, f);
+  if (CONTACT_Q.test(s)) return { text: Q(lg, 'To talk to the owner or arrange a visit, press “Contact the owner” below.', 'मालिकसँग कुरा गर्न वा हेर्न जान, तलको “मालिकलाई सम्पर्क गर्नुहोस्” थिच्नुहोस्।') + (f && f.items.length ? Q(lg, ' These match what you mentioned.', ' तपाईंले भनेकासँग यी मिल्छन्।') : ''), ids: f ? f.items.slice(0, 3).map(l => l.id) : [] };
+  if (f && !f.rest.length) return localAnswer(q, f, lg);
   return null;
 }
 // Each phone or computer gets a fair share of AI answers per day, so one visitor cannot use up the free quota for everyone.
@@ -1562,6 +1621,7 @@ function aiLeft(use) {
   } catch (e) { return true; }
 }
 chat.cache = new Map();
+const welcomeText = () => 'Namaste. Ask me about the properties listed here, for example “land under 1 crore in Sanepa” or “2 BHK flat for rent”.' + (chat.ai ? ' You can also ask me simple questions about buying land or renting in Nepal.' : '');
 function renderChat() {
   const log = $('#chatLog');
   log.innerHTML = chat.msgs.map(m => '<div class="msg ' + (m.role === 'bot' ? 'bot' : 'me') + '"><p>' + esc(m.text) + '</p>' +
@@ -1572,19 +1632,21 @@ function renderChat() {
   log.scrollTop = log.scrollHeight;
 }
 function openChat() {
-  if (!chat.msgs.length) chat.msgs.push({ role: 'bot', text: 'Namaste. Ask me about the properties listed here, for example “land under 1 crore in Sanepa” or “2 BHK flat for rent”.' });
+  if (!chat.msgs.length) chat.msgs.push({ role: 'bot', text: welcomeText(), welcome: true });
   renderChat();
   show(dlgChat);
 }
 async function ask(q) {
+  const lg = chatLang(q);
   chat.msgs.push({ role: 'me', text: q });
   chat.busy = true; renderChat();
   // 1. The listings answer it by themselves when the message is a plain search. No AI call is spent.
-  let out = quickAnswer(q);
-  const key = q.trim().toLowerCase().replace(/\s+/g, ' ');
+  let out = quickAnswer(q, lg);
+  const key = lg + ':' + q.trim().toLowerCase().replace(/\s+/g, ' ');
   // 2. The same question asked again gets the answer it got before.
   if (!out && chat.cache.has(key)) out = chat.cache.get(key);
-  // 3. Everything else goes to the AI, if it is connected and this visitor still has answers left today.
+  // 3. Everything else, including questions that are not about the listings, goes to the AI,
+  //    if it is connected and this visitor still has answers left today.
   if (!out && chat.ai && aiLeft(true)) {
     try {
       const rows = shown().filter(l => l.status === 'available').slice(0, 60).map(l => ({
@@ -1592,7 +1654,7 @@ async function ask(q) {
         facts: cardFacts(l).concat(featuresOf(l)).join(', '), notes: String(l.desc || '').slice(0, 200)
       }));
       const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ site: state.site.name || DEF_SITE.name, messages: chat.msgs.slice(-8).map(m => ({ role: m.role, text: m.text })), listings: rows }) });
+        body: JSON.stringify({ site: state.site.name || DEF_SITE.name, lang: lg, messages: chat.msgs.slice(-8).map(m => ({ role: m.role, text: m.text })), listings: rows }) });
       const j = await r.json().catch(() => null);
       if (r.ok && j && j.text) {
         const low = j.text.toLowerCase();
@@ -1604,8 +1666,19 @@ async function ask(q) {
     } catch (e) {}
   }
   // 4. No AI key, the limit is reached, or the AI did not answer: the listings answer as well as they can.
-  if (!out) out = localAnswer(q);
+  if (!out) {
+    out = localAnswer(q, null, lg);
+    const f0 = findListings(q);
+    if (!f0 || f0.rest.length) {
+      // Not a property search, and the AI could not answer: say why instead of repeating the same help text.
+      out = chat.ai
+        ? (aiLeft(false) ? { text: Q(lg, 'The AI could not answer just now. Please try again in a minute. You can still search the properties, for example “land under 1 crore in Sanepa”.', 'अहिले AI ले जवाफ दिन सकेन। एक मिनेटपछि फेरि प्रयास गर्नुहोस्। सम्पत्ति खोज्न भने मिल्छ, जस्तै “सानेपामा १ करोडभित्रको जग्गा”।'), ids: [] }
+                         : { text: Q(lg, 'You have used today’s free AI answers on this phone. Property searches still work, for example “2 BHK flat for rent”. For anything else, press Contact.', 'आजका निःशुल्क AI जवाफ यो फोनमा सकिए। सम्पत्ति खोज्न भने मिल्छ, जस्तै “२ BHK फ्ल्याट भाडामा”। अरू कुराका लागि “सम्पर्क” थिच्नुहोस्।'), ids: [] })
+        : { text: Q(lg, 'The AI helper is not switched on yet, so I can only search the properties. Try “land under 1 crore in Sanepa” or “room in Kupondole”.', 'AI सहायक अहिले चालु छैन, त्यसैले म सम्पत्ति मात्र खोज्न सक्छु। “सानेपामा १ करोडभित्रको जग्गा” वा “कुपण्डोलमा कोठा” लेखेर हेर्नुहोस्।'), ids: [] };
+    }
+  }
   chat.busy = false;
+  if (lg === 'ne') out = Object.assign({}, out, { text: nepMoney(out.text) });
   chat.msgs.push({ role: 'bot', text: out.text, ids: out.ids, ai: !!out.ai, local: !!out.local });
   if (chat.msgs.length > 40) chat.msgs = chat.msgs.slice(-40);
   renderChat();
@@ -2121,6 +2194,16 @@ $('#siteForm').addEventListener('submit', async e => {
 
 /* ---------- boot ---------- */
 function renderAll() { renderHeader(); renderLegend(); renderList(); if (dlgManage.open) renderManage(); }
+// English / Nepali: the words on the page are swapped in js/i18n.js. This redraws what the site itself writes.
+if (window.GJ) {
+  document.addEventListener('click', e => { const b = e.target.closest('[data-lang]'); if (b) GJ.set(b.dataset.lang); });
+  GJ.onChange(() => {
+    if (chat.msgs.length === 1 && chat.msgs[0].welcome) chat.msgs[0].text = welcomeText();
+    chatLabels(); renderAccount(); renderAll();
+    if (budget) runBudget();
+    if (dlgChat.open) renderChat();
+  });
+}
 function openFromUrl() {
   const m = /property\/([\w-]+)\/?$/.exec(location.pathname) || /^#p-([\w-]+)$/.exec(location.hash || '');
   if (!m) return;

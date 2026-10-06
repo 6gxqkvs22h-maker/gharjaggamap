@@ -232,6 +232,7 @@
       <button class="btn" type="button" data-go="chat" id="menuAsk">Ask about properties</button>
       <button class="btn" type="button" data-go="help">How to use</button>
     </nav>
+    <div class="langrow"><span class="hint">Language</span><div class="langsw" role="group" aria-label="Language"><button type="button" data-lang="en" aria-pressed="true">English</button><button type="button" data-lang="ne" aria-pressed="false">नेपाली</button></div></div>
     <nav class="social" id="socialNav" aria-label="Social media"></nav>
     <div class="acct">
       <p class="hint" id="acctText" hidden></p>
@@ -240,6 +241,7 @@
       <button class="btn" id="signOutBtn" type="button" hidden>Sign out</button>
       <button class="btn" id="loginBtn" type="button">Owner sign in</button>
     </div>
+    <p class="hint ver" data-nt>Version 8</p>
   </div>
 </dialog>
 
@@ -266,6 +268,7 @@
       <h2 id="chatH">Ask about properties</h2>
       <button class="x" type="button" data-close aria-label="Close">&times;</button>
     </div>
+    <div class="langrow chatlang"><span class="hint">Language</span><div class="langsw" role="group" aria-label="Language"><button type="button" data-lang="en" aria-pressed="true">English</button><button type="button" data-lang="ne" aria-pressed="false">नेपाली</button></div></div>
     <div class="chatlog" id="chatLog" aria-live="polite"></div>
     <form class="chatform" id="chatForm" novalidate>
       <label class="sr" for="chatIn">Your question</label>
@@ -588,6 +591,7 @@
 <script src="/vendor/leaflet/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/js/config.js"></script>
+<script src="/js/i18n.js"></script>
 <script src="/js/app.js"></script>
 </body>
 </html>

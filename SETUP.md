@@ -177,3 +177,12 @@ change `https://gharjaggamap.vercel.app` there to the new address.
   "listings could not be loaded", open the Supabase dashboard and resume the project.
 - Map data is from OpenStreetMap contributors. Keep the credit line on the map.
 - The map library in `vendor/leaflet` is Leaflet 1.9.4 (BSD 2-Clause licence).
+
+## English and Nepali
+
+The site opens in English. Visitors can switch the buttons and labels to Nepali under Menu > Language (also at the top of the Ask AI chat). The choice is remembered on their phone.
+
+- Only the site's own words change. Listing titles, descriptions, place names and your own text stay as you typed them.
+- The Ask AI chat always answers in English.
+- To fix or add a Nepali word, open `js/i18n.js` and edit the list near the top.
+- The menu shows "Version 8" at the bottom, so you can check which update is live.
