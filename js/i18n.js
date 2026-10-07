@@ -95,6 +95,11 @@
     'Could not get your location. Allow location for this site in your browser settings.': 'तपाईंको लोकेसन पाइएन। ब्राउजर सेटिङमा यो साइटलाई लोकेसन अनुमति दिनुहोस्।',
     'Type your budget as a number, for example 50 lakh, 1.2 crore or 25000 a month.': 'बजेट संख्यामा लेख्नुहोस्, जस्तै ५० लाख, १.२ करोड वा महिनाको २५०००।',
     'Version': 'संस्करण',
+    'Houses, land, flats, rooms and commercial properties for sale and rent in Kathmandu': 'काठमाडौंमा बिक्री र भाडाका घर, जग्गा, फ्ल्याट, कोठा र व्यावसायिक सम्पत्ति',
+    'Signed in as the owner.': 'मालिकका रूपमा साइन इन गरिएको छ।',
+    'Zoom in': 'नक्सा ठूलो पार्नुहोस्', 'Zoom out': 'नक्सा सानो पार्नुहोस्', 'My location': 'मेरो लोकेसन',
+    'Save this property': 'यो सम्पत्ति सुरक्षित गर्नुहोस्', 'Remove from saved': 'सुरक्षितबाट हटाउनुहोस्', 'Ghar Jagga Map, home': 'Ghar Jagga Map, गृहपृष्ठ',
+    'Interest sent': 'चासो पठाइयो', 'Customers': 'ग्राहकहरू',
     'Sent. The owner will contact you.': 'पठाइयो। मालिकले तपाईंलाई सम्पर्क गर्नुहुनेछ।', 'Phone number saved.': 'फोन नम्बर सेभ भयो।', 'Phone number removed.': 'फोन नम्बर हटाइयो।',
     'Signed out.': 'साइन आउट भयो।', 'Google sign-in could not start. Try again in a moment.': 'Google साइन इन सुरु भएन। केही बेरमा फेरि प्रयास गर्नुहोस्।',
     'That property is no longer listed. Here is everything that is available.': 'त्यो सम्पत्ति अब सूचीमा छैन। उपलब्ध सबै यहाँ छन्।',
@@ -130,6 +135,9 @@
 
   // Pieces of sentences, tried when the whole text is not in the list above. Each returns Nepali or null.
   var RULES = [
+    [/^(\d+) available$/, function (m) { return m[1] + ' उपलब्ध'; }],
+    [/^Land about (.+)$/, function (m) { return 'जग्गा करिब ' + money(m[1]); }],
+    [/^Signed in as (.+)\.$/, function (m) { return m[1] + ' को रूपमा साइन इन गरिएको छ।'; }],
     [/^(\d+) or more$/, function (m) { return m[1] + ' वा बढी'; }],
     [/^(\d+) ft or wider$/, function (m) { return m[1] + ' फिट वा बढी चौडा'; }],
     [/^More filters \((\d+)\)$/, function (m) { return 'थप फिल्टर (' + m[1] + ')'; }],
@@ -288,3 +296,4 @@
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply); else apply();
 })();
+
