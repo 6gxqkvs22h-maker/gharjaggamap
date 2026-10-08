@@ -450,6 +450,13 @@ function waUrl(num, text) {
   return 'https://wa.me/' + d + (text ? '?text=' + encodeURIComponent(text) : '');
 }
 const SOCIALS = [['facebook', 'Facebook'], ['instagram', 'Instagram'], ['tiktok', 'TikTok']];
+// Brand logos for the menu and the Contact panel (drawn inline, so no file is needed).
+const LOGO = {
+  facebook: '<svg class="slogo" viewBox="0 0 24 24" aria-hidden="true"><path fill="#1877F2" d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.68.24 2.68.24v2.97h-1.51c-1.49 0-1.96.93-1.96 1.89v2.26h3.33l-.53 3.49h-2.8V24C19.61 23.1 24 18.1 24 12.07z"/></svg>',
+  whatsapp: '<svg class="slogo" viewBox="0 0 24 24" aria-hidden="true"><path fill="#25D366" d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.16-.17.2-.35.22-.64.08-.3-.15-1.26-.46-2.39-1.48-.88-.79-1.48-1.76-1.65-2.06-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.61-.92-2.21-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.07c.15.2 2.1 3.2 5.08 4.49.71.3 1.26.49 1.69.63.71.23 1.36.2 1.87.12.57-.09 1.76-.72 2-1.41.25-.69.25-1.29.17-1.41-.07-.12-.27-.2-.57-.35M12.05 21.79h-.01a9.87 9.87 0 0 1-5.03-1.38l-.36-.21-3.74.98 1-3.65-.24-.37a9.86 9.86 0 0 1-1.51-5.26c0-5.45 4.44-9.88 9.89-9.88 2.64 0 5.12 1.03 6.99 2.9a9.82 9.82 0 0 1 2.89 6.99c0 5.45-4.44 9.88-9.88 9.88M20.46 3.49A11.82 11.82 0 0 0 12.05 0C5.5 0 .16 5.34.16 11.89c0 2.1.55 4.14 1.59 5.95L.06 24l6.3-1.65a11.88 11.88 0 0 0 5.68 1.45h.01c6.55 0 11.89-5.34 11.89-11.89 0-3.18-1.24-6.17-3.48-8.41z"/></svg>',
+  instagram: '<svg class="slogo" viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="igg" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#FEDA75"/><stop offset=".4" stop-color="#FA7E1E"/><stop offset=".7" stop-color="#D62976"/><stop offset="1" stop-color="#4F5BD5"/></linearGradient></defs><rect x="2.5" y="2.5" width="19" height="19" rx="5.5" fill="none" stroke="url(#igg)" stroke-width="2.2"/><circle cx="12" cy="12" r="4.3" fill="none" stroke="url(#igg)" stroke-width="2.2"/><circle cx="17.5" cy="6.5" r="1.4" fill="#D62976"/></svg>',
+  tiktok: '<svg class="slogo" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12.53.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/></svg>'
+};
 // The link to one property's own post or video. Only the address is kept; nothing is fetched from it.
 // Returns '' for nothing typed and null when what was typed is not a link.
 function postUrl(v) {
@@ -484,6 +491,7 @@ const placeName = l => String(l.place || '').split(',')[0].trim() || 'Other';
 const placeKey = l => placeName(l).toLowerCase();
 let budget = null, budgetIds = null, selectedId = null;
 let owner = false, busy = false, aiOn = false, aiCtl = null;
+let reqs = [];                 // listing requests sent by visitors (the owner reads them)
 let customer = null;          // a visitor who continued with Google: { id, email, name }
 let googleOn = CFG.GOOGLE_LOGIN === true;   // found out from Supabase at start, unless set in js/config.js
 let myInterest = new Set();   // the properties this customer already told the owner about
@@ -495,7 +503,7 @@ const dayKey = d => { try { return d.toLocaleDateString('en-CA', { timeZone: TZ 
 const byId = id => state.listings.find(l => l.id === id) || null;
 // Visitors never see a listing marked unavailable (the database does not send it to them either).
 const shown = () => owner ? state.listings : state.listings.filter(l => l.status !== 'unavailable');
-const dlgDetail = $('#dlgDetail'), dlgContact = $('#dlgContact'), dlgEdit = $('#dlgEdit'), dlgSite = $('#dlgSite'), dlgCats = $('#dlgCats'), dlgLogin = $('#dlgLogin'), dlgManage = $('#dlgManage'), dlgConfirm = $('#dlgConfirm'), dlgInterest = $('#dlgInterest'), dlgLeads = $('#dlgLeads'), dlgChat = $('#dlgChat'), dlgProfile = $('#dlgProfile');
+const dlgDetail = $('#dlgDetail'), dlgContact = $('#dlgContact'), dlgEdit = $('#dlgEdit'), dlgSite = $('#dlgSite'), dlgCats = $('#dlgCats'), dlgLogin = $('#dlgLogin'), dlgManage = $('#dlgManage'), dlgConfirm = $('#dlgConfirm'), dlgInterest = $('#dlgInterest'), dlgLeads = $('#dlgLeads'), dlgReqs = $('#dlgReqs'), dlgChat = $('#dlgChat'), dlgProfile = $('#dlgProfile');
 
 // Dialogs can sit on top of each other (Manage listings, then a property, then Contact). This keeps their order.
 const stack = [];
@@ -664,9 +672,11 @@ function renderHeader() {
     const u = socialUrl(k, state.site[k]);
     if (!u) return;
     const a = document.createElement('a');
-    a.href = u; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = label;
+    a.href = u; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.setAttribute('aria-label', label); a.innerHTML = (LOGO[k] || '') + '<span>' + label + '</span>';
     nav.appendChild(a);
   });
+  const wau = waUrl(state.site.whatsapp, '');
+  if (wau) { const a = document.createElement('a'); a.href = wau; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.setAttribute('aria-label', 'WhatsApp'); a.innerHTML = LOGO.whatsapp + '<span>WhatsApp</span>'; nav.insertBefore(a, nav.firstChild); }
   nav.hidden = !nav.children.length;
   const about = $('#aboutText');
   about.textContent = state.site.about || '';
@@ -1222,8 +1232,8 @@ function openContact(id) {
   $('#contactH').textContent = s.owner ? 'Contact ' + s.owner : 'Contact';
   const links = [];
   const wa = waUrl(s.whatsapp, msg);
-  if (wa) links.push([wa, 'Message on WhatsApp', true]);
-  SOCIALS.forEach(([k, label]) => { const u = socialUrl(k, s[k]); if (u) links.push([u, label, false]); });
+  if (wa) links.push([wa, LOGO.whatsapp + 'Message on WhatsApp', true]);
+  SOCIALS.forEach(([k, label]) => { const u = socialUrl(k, s[k]); if (u) links.push([u, LOGO[k] + label, false]); });
   const tel = String(s.phone || '').replace(/[^\d+]/g, '');
   const has = !!(s.phone || links.length);
   let h = '';
@@ -1235,7 +1245,7 @@ function openContact(id) {
     h += '<p class="hint">Full details, papers and site visits are arranged directly with the owner.</p>';
     if (s.phone) h += '<div class="field"><span>Call or text</span><div class="row"><span class="phone" id="phoneText">' + esc(s.phone) + '</span>' +
       (tel.length >= 7 ? '<a class="btn small primary" href="tel:' + esc(tel) + '">Call</a>' : '') + '<button class="btn small" type="button" data-copy="phone">Copy number</button></div></div>';
-    if (links.length) h += '<div class="row">' + links.map(a => '<a class="btn' + (a[2] ? ' primary' : '') + '" href="' + esc(a[0]) + '" target="_blank" rel="noopener noreferrer">' + a[1] + '</a>').join('') + '</div>';
+    if (links.length) h += '<div class="row">' + links.map(a => '<a class="btn withlogo' + (a[2] ? ' primary' : '') + '" href="' + esc(a[0]) + '" target="_blank" rel="noopener noreferrer">' + a[1] + '</a>').join('') + '</div>';
     h += '<label class="field" for="msgText"><span>Message you can send</span><textarea id="msgText" class="msgbox" rows="3" readonly></textarea></label>' +
       '<div class="row"><button class="btn small" type="button" data-copy="msg">Copy message</button></div>';
   }
@@ -1266,7 +1276,7 @@ dlgMenu.addEventListener('click', e => {
 /* ---------- saving to the database ---------- */
 function setBusy(on) {
   busy = on;
-  ['#f_save', '#s_save', '#c_save', '#l_save', '#addBtn', '#siteBtn', '#catBtn', '#manageBtn', '#m_add', '#confirmYes'].forEach(s => { const b = $(s); if (b) b.disabled = on; });
+  ['#f_save', '#reqsBtn', '#s_save', '#c_save', '#l_save', '#addBtn', '#siteBtn', '#catBtn', '#manageBtn', '#m_add', '#confirmYes'].forEach(s => { const b = $(s); if (b) b.disabled = on; });
   $('#f_save').textContent = on ? 'Saving…' : ($('#f_save').dataset.label || 'Save property');
   $('#s_save').textContent = on ? 'Saving…' : 'Save details';
 }
@@ -1348,6 +1358,9 @@ function renderAccount() {
   // With Google switched on, the owner signs in with Google like everyone else and is recognised by email.
   // The password sign-in stays reachable at the address /#owner in case Google is ever unavailable.
   $('#loginBtn').hidden = $('#loginLink').hidden = inNow || googleOn;
+  const nNew = reqs.filter(r => r.status === 'new').length;
+  $('#reqsBtn').textContent = 'Requests' + (nNew ? ' (' + nNew + ')' : '');
+  $('#reqBtn').hidden = owner;
   $('#leadsBtn').textContent = 'Customers' + (leads.length ? ' (' + leads.length + ')' : '');
 }
 async function checkOwner() {
@@ -1361,7 +1374,7 @@ async function checkOwner() {
       customer = null;
       // The owner also gets the listings hidden from visitors, and a warning if the database is not updated yet.
       try { await loadAll(); } catch (e) {}
-      Promise.all([sb.from('listings').select('deal_type,details,featured').limit(1), loadLeads(), loadPeople()]).then(p => { $('#dbNote').hidden = !(p[0].error || p[1] || p[2]); }, () => {});
+      Promise.all([sb.from('listings').select('deal_type,details,featured').limit(1), loadLeads(), loadPeople(), loadReqs()]).then(p => { $('#dbNote').hidden = !(p[0].error || p[1] || p[2] || p[3]); }, () => {});
     } else {
       const m = u.user_metadata || {};
       customer = { id: u.id, email: String(u.email || ''), name: String(m.full_name || m.name || String(u.email || '').split('@')[0] || 'Customer').slice(0, 120), phone: '' };
@@ -1390,7 +1403,7 @@ async function googleSignIn(backTo) {
   } catch (e) { console.error(e); toast('Google sign-in could not start. Try again in a moment.'); }
 }
 // The Google icon on the buttons is shown only when the file img/google.svg exists (see SETUP.md).
-document.querySelectorAll('img.gico').forEach(i => { i.addEventListener('load', () => { i.hidden = false; }); i.src = BASE + 'img/google.svg'; });
+
 $('#googleBtn').addEventListener('click', () => googleSignIn());
 let intId = null;
 function openInterest(id) {
@@ -1435,6 +1448,13 @@ $('#intForm').addEventListener('submit', async e => {
 
 /* ---------- owner: interested customers ---------- */
 // Returns true when the table is missing, which means the database update has not been run yet.
+async function loadReqs() {
+  const r = await sb.from('requests').select('*').order('created_at', { ascending: false });
+  if (r.error) { reqs = []; renderAccount(); return true; }
+  reqs = Array.isArray(r.data) ? r.data : [];
+  renderAccount();
+  return false;
+}
 async function loadLeads() {
   const r = await sb.from('interests').select('*').order('created_at', { ascending: false });
   if (r.error) { leads = []; renderAccount(); return true; }
@@ -1785,6 +1805,57 @@ $('#signOutBtn').addEventListener('click', async () => {
   setOwner(false); toast('Signed out.');
 });
 $('#addBtn').addEventListener('click', () => openEdit(null));
+$('#reqBtn').addEventListener('click', () => { if (dlgMenu.open) dlgMenu.close(); openEdit(null, 'request'); });
+// ----- requests list (owner) -----
+let reqTab = 'new';
+function reqGaps(l) {
+  const out = [], c = catOf(l.type), K = KINDS[kindOf(c)], rent = l.deal === 'rent';
+  if (!l.photos.length) out.push('No photos'); else if (l.photos.length < 3) out.push('Only ' + l.photos.length + (l.photos.length === 1 ? ' photo' : ' photos'));
+  if (!(l.price > 0)) out.push('No price');
+  if (K && !K.sizeOpt && !(l.area && l.area.v > 0)) out.push('No size');
+  if (!l.place) out.push('No place name');
+  if (K) { const miss = fieldsOf(K, rent).filter(k => l.d[k] == null).map(k => labelOf(k, K)); if (miss.length) out.push(miss.length + ' details empty: ' + miss.slice(0, 4).join(', ') + (miss.length > 4 ? '…' : '')); }
+  return out;
+}
+function renderReqs() {
+  const tabs = [['new', 'New'], ['approved', 'Added'], ['rejected', 'Rejected']];
+  $('#rqTabs').innerHTML = tabs.map(t => '<button class="chip" type="button" data-rq="' + t[0] + '" aria-pressed="' + (reqTab === t[0]) + '">' + t[1] + '<b>' + reqs.filter(r => r.status === t[0]).length + '</b></button>').join('');
+  const list = reqs.filter(r => r.status === reqTab);
+  $('#rqList').innerHTML = list.length ? list.map(r => {
+    const l = fromRow(r.payload || {}), c = catOf(l.type), gaps = reqGaps(l), tel = telOf(r.phone), mail = mailHref(r.email, l.title);
+    const wa = waUrl(r.phone, 'Hello ' + r.name + ', about your property request on ' + (state.site.name || DEF_SITE.name) + '.');
+    return '<li class="mrow lead" data-req="' + esc(r.id) + '"><div class="mbody"><strong>' + esc(l.title || 'Property') + '</strong>' +
+      '<span>' + esc([c ? c.label : '', placeLine(l), priceText(l)].filter(Boolean).join(' · ')) + '</span>' +
+      '<span>' + esc(r.name + ' · ' + r.phone + (r.email ? ' · ' + r.email : '')) + '</span>' +
+      '<span class="hint">' + esc('Sent ' + shortDate(r.created_at)) + '</span>' +
+      (r.status === 'new' ? '<span class="gaps' + (gaps.length ? '' : ' ok') + '">' + (gaps.length ? esc('Missing: ' + gaps.join(' · ')) : 'Everything is filled in') + '</span>' : '') + '</div>' +
+      '<div class="mact">' + (r.status === 'new' ? '<button class="btn small primary" type="button" data-rqopen>Review and add</button>' : '') +
+      (tel ? '<a class="btn small" href="tel:' + esc(tel) + '">Call</a>' : '') + (wa ? '<a class="btn small" href="' + esc(wa) + '" target="_blank" rel="noopener noreferrer">WhatsApp</a>' : '') + (mail ? '<a class="btn small" href="' + esc(mail) + '">Email</a>' : '') +
+      (r.status === 'approved' && r.listing_id && byId(r.listing_id) ? '<button class="btn small" type="button" data-view="' + esc(r.listing_id) + '">View property</button>' : '') +
+      (r.status === 'new' ? '<button class="btn small" type="button" data-rqrej>Reject</button>' : '') +
+      '<button class="btn small danger" type="button" data-rqdel>Remove</button></div></li>';
+  }).join('') : '<li class="empty">' + (reqTab === 'new' ? 'No new requests. When someone sends one from the menu, it shows here.' : 'Nothing here.') + '</li>';
+}
+$('#reqsBtn').addEventListener('click', async () => { $('#rq_err').hidden = true; renderReqs(); show(dlgReqs); const bad = await loadReqs(); if (bad) { $('#rq_err').textContent = 'The database needs its update before requests work. In Supabase open SQL Editor and run database-update-12.sql.'; $('#rq_err').hidden = false; } renderReqs(); });
+$('#rqTabs').addEventListener('click', e => { const b = e.target.closest('[data-rq]'); if (!b) return; reqTab = b.dataset.rq; renderReqs(); });
+$('#rqList').addEventListener('click', async e => {
+  const li = e.target.closest('[data-req]'); if (!li) return;
+  const r = reqs.find(x => x.id === li.dataset.req); if (!r) return;
+  if (e.target.closest('[data-rqopen]')) { openEdit(null, 'review', r); return; }
+  if (e.target.closest('[data-view]')) return;
+  const act = e.target.closest('[data-rqrej]') ? 'rej' : e.target.closest('[data-rqdel]') ? 'del' : '';
+  if (!act) return;
+  const ok = await mutate($('#rq_err'), async () => {
+    if (act === 'rej') { const u = await sb.from('requests').update({ status: 'rejected' }).eq('id', r.id).select('id'); if (u.error) throw u.error; if (Array.isArray(u.data) && !u.data.length) throw { code: '42501', message: 'not allowed' }; reqs = reqs.map(x => x.id === r.id ? Object.assign({}, x, { status: 'rejected' }) : x); }
+    else {
+      if (!confirm('Remove this request for good?')) return;
+      const u = await sb.from('requests').delete().eq('id', r.id).select('id'); if (u.error) throw u.error;
+      if (r.status !== 'approved') removePhotos((r.payload && r.payload.photos) || []);
+      reqs = reqs.filter(x => x.id !== r.id);
+    }
+  }, act === 'rej' ? 'Request rejected.' : 'Request removed.');
+  if (ok) renderReqs();
+});
 $('#siteBtn').addEventListener('click', openSite);
 
 /* ---------- manage listings ---------- */
@@ -1983,9 +2054,13 @@ function applyKind() {
   readPrice();
   setTimeout(placeMini, 60);
 }
-function openEdit(id) {
+function openEdit(id, mode, req) {
   const l = id ? byId(id) : null;
-  draft = l ? JSON.parse(JSON.stringify(l)) : { id: null, type: null, deal: null, sub: '', title: '', price: 0, rateMode: false, area: { v: 0, u: 'aana' }, built: { v: 0, u: 'sqft' }, deposit: 0, social: '', d: {}, place: '', district: DISTRICT, lat: null, lng: null, desc: '', photos: [], status: 'available' };
+  const src = l || (req && req.payload ? fromRow(req.payload) : null);
+  mode = mode === 'request' || mode === 'review' ? mode : '';
+  draft = src ? JSON.parse(JSON.stringify(src)) : { id: null, type: null, deal: null, sub: '', title: '', price: 0, rateMode: false, area: { v: 0, u: 'aana' }, built: { v: 0, u: 'sqft' }, deposit: 0, social: '', d: {}, place: '', district: DISTRICT, lat: null, lng: null, desc: '', photos: [], status: 'available' };
+  draft.mode = mode; draft.reqId = mode === 'review' && req ? req.id : null;
+  if (mode === 'review') draft.id = null;
   const pf0 = draft.pf || [];
   const pa0 = draft.pa || [];
   draft.photos = (draft.photos || []).filter(okUrl).map((u, i) => ({ url: u, fx: pf0[i] ? pf0[i][0] : null, fy: pf0[i] ? pf0[i][1] : null, ann: (pa0[i] || []).map(st => st.slice()) }));
@@ -1993,15 +2068,24 @@ function openEdit(id) {
   draft.boundary = (draft.boundary || []).map(q => [q[0], q[1]]);
   $('#adjMsg').textContent = '';
   if (mini) { bndClear(); setSat(mini, false, $('#b_sat')); }
-  draft.keepType = draft.type; draft.keepUnit = l && l.area.v > 0 && UNITS[l.area.u] ? l.area.u : '';
-  $('#editH').textContent = l ? 'Edit property' : 'Add property';
-  $('#f_save').dataset.label = l ? 'Update property' : 'Save property';
+  draft.keepType = draft.type; draft.keepUnit = src && src.area.v > 0 && UNITS[src.area.u] ? src.area.u : '';
+  $('#editH').textContent = mode === 'request' ? 'Request to list your property' : mode === 'review' ? 'Add property from a request' : l ? 'Edit property' : 'Add property';
+  $('#f_save').dataset.label = mode === 'request' ? 'Send request' : mode === 'review' ? 'Publish property' : l ? 'Update property' : 'Save property';
+  $('#f_reqBox').hidden = mode !== 'request';
+  $('#r_info').hidden = mode !== 'review';
+  if (mode === 'review' && req) $('#r_info').textContent = 'Request from ' + req.name + ', ' + req.phone + (req.email ? ', ' + req.email : '') + '. Check everything, fix what is missing, then publish.';
+  $('#f_status').closest('label').style.display = mode === 'request' ? 'none' : '';
+  $('#f_featured').closest('label').style.display = mode === 'request' ? 'none' : '';
+  if (mode === 'request') {
+    let mem = {}; try { mem = JSON.parse(localStorage.getItem('gjm_req') || '{}') || {}; } catch (x) {}
+    $('#r_name').value = customer ? customer.name : String(mem.name || ''); $('#r_phone').value = customer && customer.phone ? customer.phone : String(mem.phone || ''); $('#r_email').value = customer ? customer.email : String(mem.email || ''); $('#r_site').value = '';
+  }
   $('#f_save').textContent = $('#f_save').dataset.label;
   $('#f_types').innerHTML = state.cats.map((c, i) => '<label><input type="radio" name="f_type" id="f_type_' + i + '" value="' + esc(c.id) + '"' + (c.id === draft.type ? ' checked' : '') + '><span style="--c:' + cvar(c) + '">' + kindIcon(kindOf(c)) + esc(catName(c)) + '</span></label>').join('');
-  $('#f_title').value = l ? draft.title || '' : '';
+  $('#f_title').value = src ? draft.title || '' : '';
   $('#f_unit').innerHTML = '';
   $('#f_area').value = draft.area && draft.area.v > 0 ? trimNum(draft.area.v) : '';
-  const rate = l && draft.rateMode ? rateOf(l) : null;
+  const rate = src && draft.rateMode ? rateOf(src) : null;
   $('#f_pmode').value = rate ? 'unit' : 'total';
   $('#f_price').value = draft.price > 0 ? String(rate ? Math.round(rate.v) : draft.price) : '';
   $('#f_built').value = draft.built && draft.built.v > 0 ? trimNum(draft.built.v) : '';
@@ -2297,6 +2381,16 @@ $('#editForm').addEventListener('submit', async e => {
   e.preventDefault();
   const err = $('#f_err');
   const bad = m => { err.textContent = m; err.hidden = false; };
+  const reqMode = draft && draft.mode === 'request';
+  let rq = null;
+  if (reqMode) {
+    rq = { name: $('#r_name').value.trim().slice(0, 80), phone: $('#r_phone').value.trim().slice(0, 30), email: $('#r_email').value.trim().slice(0, 120) };
+    if (!rq.name) return bad('Please write your name, so we know who to call.');
+    if (!telOf(rq.phone)) return bad('Please write your phone or WhatsApp number, for example +977 98XXXXXXXX.');
+    if (rq.email && !/^[^\s@<>"']+@[^\s@<>"']+$/.test(rq.email)) return bad('The email looks wrong. Leave it empty or check it.');
+    if ($('#r_site').value) { toast('Request sent. Thank you!'); dlgEdit.close(); return; }
+    try { if (Date.now() - (+localStorage.getItem('gjm_reqt') || 0) < 60000) return bad('Please wait a minute before sending another request.'); } catch (x) {}
+  }
   const kind = formKind(), K = KINDS[kind];
   if (!K) return bad('Choose what it is first: land, house, flat and so on.');
   if (!draft.deal) return bad('Choose For sale or For rent.');
@@ -2340,7 +2434,7 @@ $('#editForm').addEventListener('submit', async e => {
     for (let i = 0; i < draft.photos.length && i < 10; i++) {
       const ph = draft.photos[i];
       if (ph.url) { urls.push(ph.url); continue; }
-      const path = id + '/' + Date.now().toString(36) + '-' + i + '.jpg';
+      const path = (reqMode ? 'requests/' : '') + id + '/' + Date.now().toString(36) + '-' + i + '.jpg';
       const up = await sb.storage.from('photos').upload(path, ph.blob, { contentType: 'image/jpeg', cacheControl: '31536000', upsert: false });
       if (up.error) throw up.error;
       const pub = sb.storage.from('photos').getPublicUrl(path);
@@ -2358,6 +2452,13 @@ $('#editForm').addEventListener('submit', async e => {
     };
     const row = toRow(item);
     // "featured" is only sent when it is on or being switched off, so saving still works before the database has that column.
+    if (reqMode) {
+      const q = await sb.from('requests').insert({ id: id, user_id: customer ? customer.id : null, name: rq.name, phone: rq.phone, email: rq.email || null, category: cat.id, payload: row });
+      if (q.error) throw q.error;
+      draft.photos.forEach(ph => { ph.fresh = false; });
+      try { localStorage.setItem('gjm_req', JSON.stringify(rq)); localStorage.setItem('gjm_reqt', String(Date.now())); } catch (x) {}
+      return;
+    }
     item.featured = $('#f_featured').checked;
     if (item.featured || (old && old.featured)) row.featured = item.featured;
     // Editing changes the saved row; it never adds a second copy. Adding inserts one new row.
@@ -2369,7 +2470,12 @@ $('#editForm').addEventListener('submit', async e => {
     draft.photos.forEach(ph => { ph.fresh = false; });
     if (old) { removePhotos(old.photos.filter(u => urls.indexOf(u) < 0)); state.listings = state.listings.map(x => x.id === id ? saved : x); }
     else state.listings.unshift(saved);
-  }, old ? 'Listing updated.' : 'Listing published.');
+    if (draft.reqId) {
+      const u = await sb.from('requests').update({ status: 'approved', listing_id: id }).eq('id', draft.reqId);
+      if (!u.error) reqs = reqs.map(x => x.id === draft.reqId ? Object.assign({}, x, { status: 'approved', listing_id: id }) : x);
+      renderReqs();
+    }
+  }, reqMode ? 'Request sent. Thank you! We will check it and call you.' : old ? 'Listing updated.' : 'Listing published.');
   if (ok) dlgEdit.close();
 });
 // Closing the form without saving: photos uploaded during a failed save are not left behind in storage.
@@ -2445,13 +2551,13 @@ $('#siteForm').addEventListener('submit', async e => {
 });
 
 /* ---------- dialogs: close buttons and backdrop ---------- */
-[dlgDetail, dlgContact, dlgEdit, dlgSite, dlgCats, dlgLogin, dlgManage, dlgMenu, dlgHelp, dlgInterest, dlgLeads, dlgChat, dlgProfile].forEach(d => {
+[dlgDetail, dlgContact, dlgEdit, dlgSite, dlgCats, dlgLogin, dlgManage, dlgMenu, dlgHelp, dlgInterest, dlgLeads, dlgReqs, dlgChat, dlgProfile].forEach(d => {
   d.addEventListener('click', e => {
     if (e.target.closest('[data-close]')) { d.close(); return; }
     if (e.target === d && (d === dlgDetail || d === dlgContact || d === dlgMenu || d === dlgHelp || d === dlgChat)) d.close();
   });
 });
-[dlgDetail, dlgContact, dlgEdit, dlgSite, dlgCats, dlgLogin, dlgManage, dlgConfirm, dlgMenu, dlgHelp, dlgInterest, dlgLeads, dlgChat, dlgProfile].forEach(d => {
+[dlgDetail, dlgContact, dlgEdit, dlgSite, dlgCats, dlgLogin, dlgManage, dlgConfirm, dlgMenu, dlgHelp, dlgInterest, dlgLeads, dlgReqs, dlgChat, dlgProfile].forEach(d => {
   d.addEventListener('close', () => {
     const i = stack.indexOf(d); if (i >= 0) stack.splice(i, 1);
     const t = $('#toast'); if (t.parentNode === d) (stack[stack.length - 1] || document.body).appendChild(t);

@@ -198,3 +198,9 @@ The site opens in English. Visitors can switch the buttons and labels to Nepali 
 - The big photo on a property page now shows the part you chose when adjusting the photo.
 - In the edit form, under a photo, press "Draw plot line" and draw with your finger along the plot edge. "Undo line" and "Clear lines" fix mistakes. Visitors see the line on the photo.
 - The round layers button on the big map switches between the map and satellite view. No SQL change is needed.
+
+## Update 12: property requests and logos
+- Menu > "Request to list your property": anyone (no sign-in needed) fills the same form an owner uses, plus their name and phone. Nothing is published.
+- You see them under Owner tools > Requests, with what is missing. "Review and add" opens the form with their answers. Publish it, or Reject it.
+- Run `supabase/database-update-12.sql` once in Supabase > SQL Editor. Without it, sending a request fails.
+- The Google, Facebook, WhatsApp, Instagram and TikTok logos are built in. You no longer need img/google.svg.

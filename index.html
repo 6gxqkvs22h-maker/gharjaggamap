@@ -212,6 +212,7 @@
   <button class="btn small" id="manageBtn" type="button">Manage listings</button>
   <button class="btn small" id="catBtn" type="button">Categories</button>
   <button class="btn small" id="siteBtn" type="button">Site settings</button>
+  <button class="btn small" id="reqsBtn" type="button">Requests</button>
   <button class="btn small" id="leadsBtn" type="button">Customers</button>
   <p class="dbnote" id="dbNote" role="alert" hidden>The database needs its update before new listings can be saved. In Supabase open SQL Editor and run database-update.sql.</p>
 </div>
@@ -231,17 +232,18 @@
       <button class="btn" type="button" data-go="budgetH">What can your budget buy?</button>
       <button class="btn" type="button" data-go="chat" id="menuAsk">Ask about properties</button>
       <button class="btn" type="button" data-go="help">How to use</button>
+      <button class="btn" type="button" id="reqBtn">Request to list your property</button>
     </nav>
     <div class="langrow"><span class="hint">Language</span><div class="langsw" role="group" aria-label="Language"><button type="button" data-lang="en" aria-pressed="true">English</button><button type="button" data-lang="ne" aria-pressed="false">नेपाली</button></div></div>
     <nav class="social" id="socialNav" aria-label="Social media"></nav>
     <div class="acct">
       <p class="hint" id="acctText" hidden></p>
       <button class="btn" id="profileBtn" type="button" hidden>My profile</button>
-      <button class="btn gbtn" id="googleBtn" type="button" hidden><img class="gico" alt="" hidden>Continue with Google</button>
+      <button class="btn gbtn" id="googleBtn" type="button" hidden><svg class="gico" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Continue with Google</button>
       <button class="btn" id="signOutBtn" type="button" hidden>Sign out</button>
       <button class="btn" id="loginBtn" type="button">Owner sign in</button>
     </div>
-    <p class="hint ver" data-nt>Version 11</p>
+    <p class="hint ver" data-nt>Version 12</p>
   </div>
 </dialog>
 
@@ -287,7 +289,7 @@
     <div class="about-box" id="intAbout"></div>
     <div class="form" id="intOut">
       <p>Continue with Google so the owner knows who to reply to. Your name and email are sent to the owner only. They are not shown on the site.</p>
-      <button class="btn primary gbtn" type="button" id="intGoogle"><img class="gico" alt="" hidden>Continue with Google</button>
+      <button class="btn primary gbtn" type="button" id="intGoogle"><svg class="gico" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>Continue with Google</button>
     </div>
     <div class="form" id="intIn" hidden>
       <p class="hint" id="intWho"></p>
@@ -317,6 +319,19 @@
     <div class="chips" id="ldTabs" role="group" aria-label="Which customers"></div>
     <p class="err" id="ld_err" role="alert" hidden></p>
     <ul class="mlist" id="leadList"></ul>
+  </div>
+</dialog>
+
+<dialog id="dlgReqs" aria-labelledby="reqsH">
+  <div class="dlg form">
+    <div class="dlg-head">
+      <h2 id="reqsH">Property requests</h2>
+      <button class="x" type="button" data-close aria-label="Close">&times;</button>
+    </div>
+    <p class="hint">People send these from the menu. Check that each one has what its category needs. Press “Review and add” to open the form with their answers, fix anything, and publish. Call or message them if something is missing.</p>
+    <div class="chips" id="rqTabs" role="group" aria-label="Which requests"></div>
+    <p class="err" id="rq_err" role="alert" hidden></p>
+    <ul class="mlist" id="rqList"></ul>
   </div>
 </dialog>
 
@@ -357,6 +372,16 @@
       <h2 id="editH">Add property</h2>
       <button class="x" type="button" data-close aria-label="Close">&times;</button>
     </div>
+    <div class="reqbox" id="f_reqBox" hidden>
+      <p class="hint">Fill in the form below, the same way an owner does. We check every request. If everything is okay, we add your property to this app. You do not need to sign in.</p>
+      <div class="grid2">
+        <label class="field" for="r_name"><span>Your name</span><input id="r_name" type="text" maxlength="80" autocomplete="name"></label>
+        <label class="field" for="r_phone"><span>Phone or WhatsApp number</span><input id="r_phone" type="text" inputmode="tel" maxlength="30" autocomplete="tel" placeholder="+977 98XXXXXXXX"></label>
+      </div>
+      <label class="field" for="r_email"><span>Email (optional)</span><input id="r_email" type="email" maxlength="120" autocomplete="email"></label>
+      <label class="hp" aria-hidden="true">Website <input id="r_site" type="text" tabindex="-1" autocomplete="off"></label>
+    </div>
+    <p class="hint reqinfo" id="r_info" hidden></p>
 
     <fieldset class="plain">
       <legend>What is it?</legend>
