@@ -881,3 +881,12 @@ body.has-owner .page{padding-bottom:120px}
 .hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
 .gaps{font-size:13px;color:#F2A65A}
 .gaps.ok{color:var(--accent)}
+
+/* update 13: big photo shows the whole picture, highlighted request button */
+.gal-main,.gal-main.ann{aspect-ratio:auto;min-height:0;display:block;background:#000}
+.gal-main.empty{display:grid;height:128px}
+.gal-main>img{width:100%;height:auto;max-height:82vh;object-fit:contain;display:block;margin:0 auto}
+.gal-main .annbox{display:block;width:100%;margin:0 auto}
+.gal-main .annbox img{width:100%;height:auto;max-height:none}
+.btn.reqbtn{background:linear-gradient(135deg,#FFC145,#FF8A3D);border-color:transparent;color:#2a1300;font-weight:700;box-shadow:0 2px 10px rgba(255,138,61,.35)}
+.btn.reqbtn:hover{filter:brightness(1.06);border-color:transparent}

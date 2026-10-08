@@ -309,8 +309,7 @@ function galPhoto(l, url, c, alt) {
     const pl = st.map(a => { const pts = []; for (let k = 0; k + 1 < a.length; k += 2) pts.push(a[k] + ',' + a[k + 1]); return '<polyline points="' + pts.join(' ') + '"/>'; }).join('');
     return '<div class="annbox"><img src="' + esc(url) + '" alt="' + esc(alt || '') + '"><svg class="annsvg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' + pl + '</svg><span class="annlab" data-nt>Plot line (guide only)</span></div>';
   }
-  const pos = posOf(l, url);
-  return '<img src="' + esc(url) + '" alt="' + esc(alt || '') + '"' + (pos ? ' class="fill" style="object-position:' + pos + '"' : '') + '>';
+  return '<img src="' + esc(url) + '" alt="' + esc(alt || '') + '">';
 }
 const posOf = (l, url) => { const i = (l.photos || []).indexOf(url), p = i >= 0 && l.pf ? l.pf[i] : null; return p ? p[0] + '% ' + p[1] + '%' : ''; };
 document.addEventListener('error', e => {
