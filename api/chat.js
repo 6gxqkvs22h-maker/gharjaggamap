@@ -12,7 +12,7 @@ function tooMany(ip) {
   return list.length > 20;
 }
 
-const MODELS = () => Array.from(new Set([process.env.GEMINI_MODEL || 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.5-flash-lite']));
+const MODELS = () => Array.from(new Set([process.env.GEMINI_MODEL || 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash-lite', 'gemini-flash-lite-latest']));
 
 // One call to Gemini. Thinking is switched off because the thinking tokens count against the answer length,
 // and with a short answer limit the model could use all of it thinking and send back no text at all.
