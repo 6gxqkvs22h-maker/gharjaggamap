@@ -241,7 +241,7 @@
       <button class="btn" id="signOutBtn" type="button" hidden>Sign out</button>
       <button class="btn" id="loginBtn" type="button">Owner sign in</button>
     </div>
-    <p class="hint ver" data-nt>Version 10</p>
+    <p class="hint ver" data-nt>Version 11</p>
   </div>
 </dialog>
 
@@ -456,15 +456,20 @@
       <div class="field"><span>Photos (up to 10)</span>
         <div class="photos" id="f_photoList"></div>
         <div class="adj" id="f_adjust" hidden>
-          <p class="hint">Photo <b id="adjNo"></b>. Drag on the photo to choose the part that shows on the property cards.</p>
+          <p class="hint">Photo <b id="adjNo"></b>. <span id="adjHint">Drag on the photo to choose the part that shows on the property cards.</span></p>
           <div class="adj-wrap">
-            <div class="adj-stage" id="adjStage"><img id="adjImg" alt="Selected photo"><i class="adj-dot" id="adjDot"></i></div>
+            <div class="adj-stage" id="adjStage"><img id="adjImg" alt="Selected photo"><svg class="adj-svg" id="adjSvg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><i class="adj-dot" id="adjDot"></i></div>
             <div class="adj-side"><span class="hint">On the cards</span><div class="adj-card"><img id="adjPrev" alt=""></div></div>
           </div>
           <div class="row">
             <button class="btn small" type="button" id="adjRot">Turn photo</button>
             <button class="btn small" type="button" id="adjCover">Make this the cover</button>
             <button class="btn small" type="button" id="adjCentre">Centre</button>
+            <button class="btn small" type="button" id="adjDraw" aria-pressed="false">Draw plot line</button>
+          </div>
+          <div class="row" id="adjLines" hidden>
+            <button class="btn small" type="button" id="adjUndoLn">Undo line</button>
+            <button class="btn small" type="button" id="adjClrLn">Clear lines</button>
           </div>
           <p class="hint" id="adjMsg" role="status"></p>
         </div>

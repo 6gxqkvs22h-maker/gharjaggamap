@@ -188,6 +188,11 @@ function cleanPf(v) {
   const m = /^\s*(\d{1,3})\s*,\s*(\d{1,3})\s*$/.exec(String(v == null ? '' : v));
   return m && +m[1] <= 100 && +m[2] <= 100 ? [+m[1], +m[2]] : null;
 }
+// Lines the owner sketched on a photo (update 11): per photo a list of strokes, each stroke is x,y,x,y... in percent of the photo.
+function cleanPa(v) {
+  if (!Array.isArray(v)) return [];
+  return v.slice(0, 12).map(st => Array.isArray(st) ? st.slice(0, 300).map(Number) : []).filter(st => st.length >= 4 && st.length % 2 === 0 && st.every(n => isFinite(n) && n >= 0 && n <= 100));
+}
 function cleanBoundary(v) {
   if (!Array.isArray(v)) return [];
   const out = v.filter(p => Array.isArray(p) && isFinite(p[0]) && isFinite(p[1]) && Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180).slice(0, 40).map(p => [+p[0], +p[1]]);
@@ -198,8 +203,8 @@ function fromRow(r) {
   const det = r.details && typeof r.details === 'object' && !Array.isArray(r.details) ? r.details : {};
   const d = {};
   Object.keys(FIELDS).forEach(k => { const v = cleanVal(FIELDS[k], FIELDS[k].col ? r[k] : det[k]); if (v != null) d[k] = v; });
-  const rawPh = Array.isArray(r.photos) ? r.photos : [], photos = [], pf = [];
-  rawPh.forEach((u, i) => { if (okUrl(u)) { photos.push(u); pf.push(cleanPf(Array.isArray(det.pf) ? det.pf[i] : null)); } });
+  const rawPh = Array.isArray(r.photos) ? r.photos : [], photos = [], pf = [], pa = [];
+  rawPh.forEach((u, i) => { if (okUrl(u)) { photos.push(u); pf.push(cleanPf(Array.isArray(det.pf) ? det.pf[i] : null)); pa.push(cleanPa(Array.isArray(det.pa) ? det.pa[i] : null)); } });
   let status = STATUSES.indexOf(r.status) >= 0 ? r.status : 'available';
   if (status === 'sold' && deal === 'rent') status = 'rented';
   return {
@@ -208,7 +213,7 @@ function fromRow(r) {
     built: { v: Number(r.built_up_area) || 0, u: r.built_up_area_unit === 'sqm' ? 'sqm' : 'sqft' },
     deposit: Number(r.deposit) || 0, social: okUrl(r.social_post_url) ? r.social_post_url : '', d: d,
     place: r.place || '', district: r.district || '', lat: Number(r.lat), lng: Number(r.lng), desc: r.description || '',
-    photos: photos, pf: pf, boundary: cleanBoundary(det.boundary), status: status, featured: r.featured === true, added: r.created_at || ''
+    photos: photos, pf: pf, pa: pa, boundary: cleanBoundary(det.boundary), status: status, featured: r.featured === true, added: r.created_at || ''
   };
 }
 function toRow(l) {
@@ -223,6 +228,7 @@ function toRow(l) {
   const det = {};
   Object.keys(FIELDS).forEach(k => { const v = l.d[k]; if (FIELDS[k].col) row[k] = v == null ? null : v; else if (v != null) det[k] = v; });
   if (Array.isArray(l.pf) && l.pf.some(Boolean)) det.pf = l.pf.map(p => p ? p[0] + ',' + p[1] : '');
+  if (Array.isArray(l.pa) && l.pa.some(a => a && a.length)) det.pa = l.pa.map(a => a && a.length ? a : []);
   if (Array.isArray(l.boundary) && l.boundary.length >= 3) det.boundary = l.boundary.map(p => [+(+p[0]).toFixed(6), +(+p[1]).toFixed(6)]);
   row.details = det;
   return row;
@@ -295,6 +301,17 @@ const catIcon = c => kindIcon(kindOf(c), 'ph-ico');
 // A photo that fails to load is replaced by the category icon, so a card never shows an empty box.
 const imgTag = (url, c, alt, pos) => '<img src="' + esc(url) + '" alt="' + esc(alt || '') + '" loading="lazy" data-k="' + kindOf(c) + '" data-c="' + cnum(c) + '"' + (pos ? ' style="object-position:' + pos + '"' : '') + '>';
 // The part of a photo the owner chose to show on cards (default: the middle).
+// The big photo on the property page: with sketched lines the whole photo is shown so the lines sit exactly right;
+// otherwise a photo the owner adjusted fills the frame with the chosen part in view.
+function galPhoto(l, url, c, alt) {
+  const i = (l.photos || []).indexOf(url), st = i >= 0 && l.pa && l.pa[i] ? l.pa[i] : [];
+  if (st.length) {
+    const pl = st.map(a => { const pts = []; for (let k = 0; k + 1 < a.length; k += 2) pts.push(a[k] + ',' + a[k + 1]); return '<polyline points="' + pts.join(' ') + '"/>'; }).join('');
+    return '<div class="annbox"><img src="' + esc(url) + '" alt="' + esc(alt || '') + '"><svg class="annsvg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' + pl + '</svg><span class="annlab" data-nt>Plot line (guide only)</span></div>';
+  }
+  const pos = posOf(l, url);
+  return '<img src="' + esc(url) + '" alt="' + esc(alt || '') + '"' + (pos ? ' class="fill" style="object-position:' + pos + '"' : '') + '>';
+}
 const posOf = (l, url) => { const i = (l.photos || []).indexOf(url), p = i >= 0 && l.pf ? l.pf[i] : null; return p ? p[0] + '% ' + p[1] + '%' : ''; };
 document.addEventListener('error', e => {
   const t = e.target;
@@ -515,7 +532,7 @@ const map = L.map('mainMap', { minZoom: 9, maxBounds: L.latLngBounds(AREA).pad(0
 // Lock zooming out at the level where the whole area just fits the map box.
 function lockZoom(m) { m.setMinZoom(Math.floor(m.getBoundsZoom(AREA, false) * 2) / 2); }
 map.attributionControl.setPrefix(false);
-baseLayer().addTo(map);
+map._base = baseLayer().addTo(map);
 lockZoom(map);
 map.fitBounds(AREA);
 map.on('resize', () => lockZoom(map));
@@ -612,6 +629,23 @@ const LocateCtl = L.Control.extend({
   }
 });
 map.addControl(new LocateCtl());
+// Satellite button on the big map, so a visitor can look at the land and the roads around it.
+if (CFG.MAPTILER_KEY) {
+  const SatCtl = L.Control.extend({
+    options: { position: 'bottomright' },
+    onAdd: function () {
+      const b = L.DomUtil.create('button', 'locate-btn sat-btn');
+      b.type = 'button'; b.id = 'mapSat';
+      const sync = () => { const on = !!map._satOn; b.setAttribute('aria-pressed', String(on)); b.title = b.dataset.t = on ? 'Map view' : 'Satellite view'; b.setAttribute('aria-label', b.title); b.classList.toggle('on', on); };
+      b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.5 8 12 13l9.5-5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="m2.5 12.5 9.5 5 9.5-5M2.5 16.5l9.5 5 9.5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+      L.DomEvent.disableClickPropagation(b);
+      L.DomEvent.on(b, 'click', () => { setSat(map, !map._satOn, null); sync(); });
+      sync();
+      return b;
+    }
+  });
+  map.addControl(new SatCtl());
+}
 
 /* ---------- header, legend, footer ---------- */
 function renderHeader() {
@@ -1088,7 +1122,7 @@ function openDetail(id) {
   const feats = featuresOf(l);
   let h = '<div class="dlg-head"><div><div class="card-top">' + badges(l) + '</div><h2>' + esc(l.title) + '</h2></div>' +
     '<button class="x" type="button" data-close aria-label="Close">&times;</button></div>';
-  h += '<div class="gal"><div class="gal-main' + (photos.length ? '' : ' empty') + '" style="--c:' + cvar(cat) + '" id="galMain">' + (photos.length ? imgTag(photos[0], cat, 'Photo 1 of ' + l.title) : catIcon(cat)) + '</div>';
+  h += '<div class="gal"><div class="gal-main' + (photos.length ? '' : ' empty') + (photos.length && l.pa && l.pa[(l.photos || []).indexOf(photos[0])] && l.pa[(l.photos || []).indexOf(photos[0])].length ? ' ann' : '') + '" style="--c:' + cvar(cat) + '" id="galMain">' + (photos.length ? galPhoto(l, photos[0], cat, 'Photo 1 of ' + l.title) : catIcon(cat)) + '</div>';
   h += heartBtn(l);
   if (photos.length > 1) h += '<div class="gal-thumbs">' + photos.map((p, i) => '<button type="button" data-ph="' + i + '" aria-pressed="' + (i === 0) + '" aria-label="Photo ' + (i + 1) + '"><img src="' + esc(p) + '" alt="" loading="lazy"' + (posOf(l, p) ? ' style="object-position:' + posOf(l, p) + '"' : '') + '></button>').join('') + '</div>';
   h += '</div>';
@@ -1148,8 +1182,8 @@ $('#detailBody').addEventListener('click', e => {
   const t = e.target;
   const ph = t.closest('[data-ph]');
   if (ph) {
-    const i = +ph.dataset.ph, p = box._photos[i];
-    if (p) { $('#galMain').innerHTML = '<img src="' + esc(p) + '" alt="Photo ' + (i + 1) + '">'; box.querySelectorAll('[data-ph]').forEach(b => b.setAttribute('aria-pressed', String(b === ph))); }
+    const i = +ph.dataset.ph, p = box._photos[i], l0 = byId(id);
+    if (p) { $('#galMain').innerHTML = galPhoto(l0, p, catOf(l0.type), 'Photo ' + (i + 1)); $('#galMain').classList.toggle('ann', !!$('#galMain .annbox')); box.querySelectorAll('[data-ph]').forEach(b => b.setAttribute('aria-pressed', String(b === ph))); }
     return;
   }
   if (!l) return;
@@ -1953,7 +1987,8 @@ function openEdit(id) {
   const l = id ? byId(id) : null;
   draft = l ? JSON.parse(JSON.stringify(l)) : { id: null, type: null, deal: null, sub: '', title: '', price: 0, rateMode: false, area: { v: 0, u: 'aana' }, built: { v: 0, u: 'sqft' }, deposit: 0, social: '', d: {}, place: '', district: DISTRICT, lat: null, lng: null, desc: '', photos: [], status: 'available' };
   const pf0 = draft.pf || [];
-  draft.photos = (draft.photos || []).filter(okUrl).map((u, i) => ({ url: u, fx: pf0[i] ? pf0[i][0] : null, fy: pf0[i] ? pf0[i][1] : null }));
+  const pa0 = draft.pa || [];
+  draft.photos = (draft.photos || []).filter(okUrl).map((u, i) => ({ url: u, fx: pf0[i] ? pf0[i][0] : null, fy: pf0[i] ? pf0[i][1] : null, ann: (pa0[i] || []).map(st => st.slice()) }));
   draft.sel = draft.photos.length ? 0 : null;
   draft.boundary = (draft.boundary || []).map(q => [q[0], q[1]]);
   $('#adjMsg').textContent = '';
@@ -2169,20 +2204,57 @@ function renderAdjust() {
   pv.style.objectPosition = posText(p);
   $('#adjCover').disabled = draft.sel === 0;
   const tile = $('#f_photoList').querySelectorAll('.ph img')[draft.sel]; if (tile) tile.style.objectPosition = posText(p);
+  renderAnn(); syncAdjMode();
+}
+let adjDraw = false;   // false: drag to choose the part that shows on cards. true: sketch the plot line on the photo.
+function renderAnn(live) {
+  const p = draft && draft.photos[draft.sel], svg = $('#adjSvg'); if (!p || !svg) return;
+  const all = (p.ann || []).concat(live && live.length > 1 ? [live] : []);
+  svg.innerHTML = all.map(a => { const pts = []; for (let k = 0; k + 1 < a.length; k += 2) pts.push(a[k] + ',' + a[k + 1]); return '<polyline points="' + pts.join(' ') + '"/>'; }).join('');
+  $('#adjUndoLn').disabled = !(p.ann && p.ann.length); $('#adjClrLn').disabled = !(p.ann && p.ann.length);
+}
+function syncAdjMode() {
+  $('#adjDraw').setAttribute('aria-pressed', String(adjDraw));
+  $('#adjDraw').textContent = adjDraw ? 'Done drawing' : 'Draw plot line';
+  $('#adjStage').classList.toggle('drawing', adjDraw);
+  $('#adjDot').hidden = adjDraw;
+  $('#adjHint').innerHTML = adjDraw ? 'Draw with your finger along the edge of the plot. Lift your finger to end a line, then draw the next one.' : 'Drag on the photo to choose the part that shows on the property cards.';
+  $('#adjLines').hidden = !adjDraw && !((draft && draft.photos[draft.sel] && draft.photos[draft.sel].ann || []).length);
 }
 (function () {
-  const stage = $('#adjStage'); let drag = false;
+  const stage = $('#adjStage'); let drag = false, live = null;
+  const at = e => {
+    const r = $('#adjImg').getBoundingClientRect(); if (!r.width || !r.height) return null;
+    return [Math.max(0, Math.min(100, (e.clientX - r.left) / r.width * 100)), Math.max(0, Math.min(100, (e.clientY - r.top) / r.height * 100))];
+  };
   const aim = e => {
     const p = draft && draft.photos[draft.sel]; if (!p) return;
-    const r = $('#adjImg').getBoundingClientRect(); if (!r.width || !r.height) return;
-    p.fx = Math.max(0, Math.min(100, Math.round((e.clientX - r.left) / r.width * 100)));
-    p.fy = Math.max(0, Math.min(100, Math.round((e.clientY - r.top) / r.height * 100)));
+    const q = at(e); if (!q) return;
+    p.fx = Math.round(q[0]); p.fy = Math.round(q[1]);
     renderAdjust();
   };
-  stage.addEventListener('pointerdown', e => { drag = true; try { stage.setPointerCapture(e.pointerId); } catch (x) {} aim(e); e.preventDefault(); });
-  stage.addEventListener('pointermove', e => { if (drag) aim(e); });
-  ['pointerup', 'pointercancel'].forEach(t => stage.addEventListener(t, () => { drag = false; }));
+  const add = e => {
+    const q = at(e); if (!q || !live) return;
+    const n = live.length, lx = live[n - 2], ly = live[n - 1];
+    if (n >= 300 || Math.hypot(q[0] - lx, q[1] - ly) < 1.2) return;
+    live.push(+q[0].toFixed(1), +q[1].toFixed(1)); renderAnn(live);
+  };
+  stage.addEventListener('pointerdown', e => {
+    const p = draft && draft.photos[draft.sel]; if (!p) return;
+    drag = true; try { stage.setPointerCapture(e.pointerId); } catch (x) {} e.preventDefault();
+    if (adjDraw) { const q = at(e); if (!q) return; if ((p.ann || []).length >= 12) { $('#adjMsg').textContent = 'That is enough lines for one photo. Undo one to draw another.'; drag = false; return; } $('#adjMsg').textContent = ''; live = [+q[0].toFixed(1), +q[1].toFixed(1)]; }
+    else aim(e);
+  });
+  stage.addEventListener('pointermove', e => { if (!drag) return; if (adjDraw) add(e); else aim(e); });
+  const end = () => {
+    if (drag && adjDraw && live) { const p = draft.photos[draft.sel]; if (p && live.length >= 4) { p.ann = (p.ann || []).concat([live]); } live = null; renderAnn(); syncAdjMode(); }
+    drag = false;
+  };
+  ['pointerup', 'pointercancel'].forEach(t => stage.addEventListener(t, end));
 })();
+$('#adjDraw').addEventListener('click', () => { adjDraw = !adjDraw; syncAdjMode(); });
+$('#adjUndoLn').addEventListener('click', () => { const p = draft.photos[draft.sel]; if (p && p.ann && p.ann.length) { p.ann.pop(); renderAnn(); syncAdjMode(); } });
+$('#adjClrLn').addEventListener('click', () => { const p = draft.photos[draft.sel]; if (p) { p.ann = []; renderAnn(); syncAdjMode(); } });
 $('#adjCentre').addEventListener('click', () => { const p = draft.photos[draft.sel]; if (p) { p.fx = p.fy = 50; renderAdjust(); } });
 $('#adjCover').addEventListener('click', () => {
   if (draft.sel > 0) { const p = draft.photos.splice(draft.sel, 1)[0]; draft.photos.unshift(p); draft.sel = 0; renderDraftPhotos(); }
@@ -2205,6 +2277,7 @@ $('#adjRot').addEventListener('click', async () => {
     const ox = p.fx == null ? 50 : p.fx, oy = p.fy == null ? 50 : p.fy;
     delete p.url; p.fresh = false; p.blob = nb; p.preview = URL.createObjectURL(nb);
     p.fx = 100 - oy; p.fy = ox;
+    p.ann = (p.ann || []).map(a => a.map((n, k) => k % 2 === 0 ? +(100 - a[k + 1]).toFixed(1) : a[k - 1]));
     msg.textContent = '';
     renderDraftPhotos();
   } catch (e) { msg.textContent = 'This photo could not be turned here. Remove it and add it again from your phone.'; }
@@ -2279,6 +2352,7 @@ $('#editForm').addEventListener('submit', async e => {
       built: { v: K.built && bv > 0 ? bv : 0, u: $('#f_builtUnit').value === 'sqm' ? 'sqm' : 'sqft' }, deposit: dep.value, social: social, d: d,
       place: place, district: DISTRICT, lat: draft.lat, lng: draft.lng, desc: $('#f_desc').value.trim(), photos: urls,
       pf: draft.photos.slice(0, urls.length).map(ph => ph.fx == null || (ph.fx === 50 && ph.fy === 50) ? null : [ph.fx, ph.fy]),
+      pa: draft.photos.slice(0, urls.length).map(ph => (ph.ann || []).map(st => st.map(n => +n.toFixed(1)))),
       boundary: (draft.boundary || []).length >= 3 ? draft.boundary : [],
       status: STATUSES.indexOf($('#f_status').value) >= 0 ? $('#f_status').value : 'available'
     };

@@ -193,3 +193,8 @@ The site opens in English. Visitors can switch the buttons and labels to Nepali 
 - Under the map, press "Draw outline" and tap each corner of the plot. Visitors see the outline on the property map, with the approximate area.
 - "Satellite view" needs the MapTiler key in `js/config.js`.
 - If the AI does not answer, open `your-site/api/chat?test=1` in a browser. It shows whether Gemini replied and, if not, the reason.
+
+## Update 11: cover photo, sketch on photo, satellite on the big map
+- The big photo on a property page now shows the part you chose when adjusting the photo.
+- In the edit form, under a photo, press "Draw plot line" and draw with your finger along the plot edge. "Undo line" and "Clear lines" fix mistakes. Visitors see the line on the photo.
+- The round layers button on the big map switches between the map and satellite view. No SQL change is needed.
