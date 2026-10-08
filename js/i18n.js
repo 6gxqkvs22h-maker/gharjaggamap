@@ -100,6 +100,8 @@
     'Zoom in': 'नक्सा ठूलो पार्नुहोस्', 'Zoom out': 'नक्सा सानो पार्नुहोस्', 'My location': 'मेरो लोकेसन',
     'Save this property': 'यो सम्पत्ति सुरक्षित गर्नुहोस्', 'Remove from saved': 'सुरक्षितबाट हटाउनुहोस्', 'Ghar Jagga Map, home': 'Ghar Jagga Map, गृहपृष्ठ',
     'Interest sent': 'चासो पठाइयो', 'Customers': 'ग्राहकहरू',
+    'Satellite view': 'स्याटेलाइट दृश्य', 'Map view': 'नक्सा दृश्य', 'Plot outline:': 'जग्गाको सीमा:',
+    'The outline is drawn by the owner and is only a guide. Confirm the exact boundary with the owner and the land papers.': 'यो सीमा मालिकले कोरेको हो र केवल मार्गदर्शन हो। ठ्याक्कै सीमा मालिक र जग्गाका कागजातसँग पुष्टि गर्नुहोस्।',
     'Sent. The owner will contact you.': 'पठाइयो। मालिकले तपाईंलाई सम्पर्क गर्नुहुनेछ।', 'Phone number saved.': 'फोन नम्बर सेभ भयो।', 'Phone number removed.': 'फोन नम्बर हटाइयो।',
     'Signed out.': 'साइन आउट भयो।', 'Google sign-in could not start. Try again in a moment.': 'Google साइन इन सुरु भएन। केही बेरमा फेरि प्रयास गर्नुहोस्।',
     'That property is no longer listed. Here is everything that is available.': 'त्यो सम्पत्ति अब सूचीमा छैन। उपलब्ध सबै यहाँ छन्।',
@@ -135,6 +137,7 @@
 
   // Pieces of sentences, tried when the whole text is not in the list above. Each returns Nepali or null.
   var RULES = [
+    [/^about (.+)$/, function (m) { return 'करिब ' + money(m[1]); }],
     [/^(\d+) available$/, function (m) { return m[1] + ' उपलब्ध'; }],
     [/^Land about (.+)$/, function (m) { return 'जग्गा करिब ' + money(m[1]); }],
     [/^Signed in as (.+)\.$/, function (m) { return m[1] + ' को रूपमा साइन इन गरिएको छ।'; }],

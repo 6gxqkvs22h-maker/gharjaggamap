@@ -185,4 +185,11 @@ The site opens in English. Visitors can switch the buttons and labels to Nepali 
 - Only the site's own words change. Listing titles, descriptions, place names and your own text stay as you typed them.
 - The Ask AI chat always answers in English.
 - To fix or add a Nepali word, open `js/i18n.js` and edit the list near the top.
-- The menu shows "Version 8" at the bottom, so you can check which update is live.
+- The menu shows "Version 10" at the bottom, so you can check which update is live.
+
+## Photos and plot outline (update 10)
+
+- When you edit a property, tap a photo. Drag on it to choose the part that shows on the cards, turn it, or make it the cover.
+- Under the map, press "Draw outline" and tap each corner of the plot. Visitors see the outline on the property map, with the approximate area.
+- "Satellite view" needs the MapTiler key in `js/config.js`.
+- If the AI does not answer, open `your-site/api/chat?test=1` in a browser. It shows whether Gemini replied and, if not, the reason.

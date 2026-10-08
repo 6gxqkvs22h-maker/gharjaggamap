@@ -183,11 +183,23 @@ function cleanVal(f, v) {
   return s || null;
 }
 
+// Update 10 keeps two extra things inside the existing "details" column: which part of each photo to show (pf) and the drawn plot outline.
+function cleanPf(v) {
+  const m = /^\s*(\d{1,3})\s*,\s*(\d{1,3})\s*$/.exec(String(v == null ? '' : v));
+  return m && +m[1] <= 100 && +m[2] <= 100 ? [+m[1], +m[2]] : null;
+}
+function cleanBoundary(v) {
+  if (!Array.isArray(v)) return [];
+  const out = v.filter(p => Array.isArray(p) && isFinite(p[0]) && isFinite(p[1]) && Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180).slice(0, 40).map(p => [+p[0], +p[1]]);
+  return out.length >= 3 ? out : [];
+}
 function fromRow(r) {
   const deal = r.deal_type === 'rent' || r.deal_type === 'sale' ? r.deal_type : catOf(r.type).deal;
   const det = r.details && typeof r.details === 'object' && !Array.isArray(r.details) ? r.details : {};
   const d = {};
   Object.keys(FIELDS).forEach(k => { const v = cleanVal(FIELDS[k], FIELDS[k].col ? r[k] : det[k]); if (v != null) d[k] = v; });
+  const rawPh = Array.isArray(r.photos) ? r.photos : [], photos = [], pf = [];
+  rawPh.forEach((u, i) => { if (okUrl(u)) { photos.push(u); pf.push(cleanPf(Array.isArray(det.pf) ? det.pf[i] : null)); } });
   let status = STATUSES.indexOf(r.status) >= 0 ? r.status : 'available';
   if (status === 'sold' && deal === 'rent') status = 'rented';
   return {
@@ -196,7 +208,7 @@ function fromRow(r) {
     built: { v: Number(r.built_up_area) || 0, u: r.built_up_area_unit === 'sqm' ? 'sqm' : 'sqft' },
     deposit: Number(r.deposit) || 0, social: okUrl(r.social_post_url) ? r.social_post_url : '', d: d,
     place: r.place || '', district: r.district || '', lat: Number(r.lat), lng: Number(r.lng), desc: r.description || '',
-    photos: Array.isArray(r.photos) ? r.photos.filter(okUrl) : [], status: status, featured: r.featured === true, added: r.created_at || ''
+    photos: photos, pf: pf, boundary: cleanBoundary(det.boundary), status: status, featured: r.featured === true, added: r.created_at || ''
   };
 }
 function toRow(l) {
@@ -210,6 +222,8 @@ function toRow(l) {
   };
   const det = {};
   Object.keys(FIELDS).forEach(k => { const v = l.d[k]; if (FIELDS[k].col) row[k] = v == null ? null : v; else if (v != null) det[k] = v; });
+  if (Array.isArray(l.pf) && l.pf.some(Boolean)) det.pf = l.pf.map(p => p ? p[0] + ',' + p[1] : '');
+  if (Array.isArray(l.boundary) && l.boundary.length >= 3) det.boundary = l.boundary.map(p => [+(+p[0]).toFixed(6), +(+p[1]).toFixed(6)]);
   row.details = det;
   return row;
 }
@@ -279,7 +293,9 @@ const ICONS = {
 const kindIcon = (kind, cls) => '<svg class="kico' + (cls ? ' ' + cls : '') + '" viewBox="0 0 48 48" aria-hidden="true">' + (ICONS[kind] || ICONS.house) + '</svg>';
 const catIcon = c => kindIcon(kindOf(c), 'ph-ico');
 // A photo that fails to load is replaced by the category icon, so a card never shows an empty box.
-const imgTag = (url, c, alt) => '<img src="' + esc(url) + '" alt="' + esc(alt || '') + '" loading="lazy" data-k="' + kindOf(c) + '" data-c="' + cnum(c) + '">';
+const imgTag = (url, c, alt, pos) => '<img src="' + esc(url) + '" alt="' + esc(alt || '') + '" loading="lazy" data-k="' + kindOf(c) + '" data-c="' + cnum(c) + '"' + (pos ? ' style="object-position:' + pos + '"' : '') + '>';
+// The part of a photo the owner chose to show on cards (default: the middle).
+const posOf = (l, url) => { const i = (l.photos || []).indexOf(url), p = i >= 0 && l.pf ? l.pf[i] : null; return p ? p[0] + '% ' + p[1] + '%' : ''; };
 document.addEventListener('error', e => {
   const t = e.target;
   if (!t || t.tagName !== 'IMG' || !t.dataset.k) return;
@@ -504,6 +520,7 @@ lockZoom(map);
 map.fitBounds(AREA);
 map.on('resize', () => lockZoom(map));
 const markLayer = L.layerGroup().addTo(map);
+const outlineLayer = L.layerGroup().addTo(map);   // the drawn plot outline of the property that is open
 let mapItems = [];
 
 function pinIcon(l, cls) {
@@ -527,6 +544,9 @@ function fitPoints(pts) {
 // current zoom are shown as one numbered bubble; tapping it zooms in until they separate.
 function drawMap() {
   markLayer.clearLayers();
+  outlineLayer.clearLayers();
+  const sel = selectedId ? byId(selectedId) : null;
+  if (sel && sel.boundary && sel.boundary.length >= 3) L.polygon(sel.boundary, BND_STYLE).addTo(outlineLayer);
   const z = map.getZoom();
   const clusters = [];
   mapItems.forEach(l => {
@@ -667,7 +687,7 @@ function renderHome() {
   $('#fcar').innerHTML = feat.length ? feat.map(l => {
     const c = catOf(l.type), ph = l.photos[0], km = kmShort(l);
     return '<div class="fcard" data-id="' + esc(l.id) + '"><button class="fmain" type="button" data-open aria-label="' + esc(headline(l) + ': ' + l.title + ', ' + priceText(l)) + '">' +
-      (ph ? imgTag(ph, c) : '<span class="fnone" style="--c:' + cvar(c) + '">' + catIcon(c) + '</span>') +
+      (ph ? imgTag(ph, c, '', posOf(l, ph)) : '<span class="fnone" style="--c:' + cvar(c) + '">' + catIcon(c) + '</span>') +
       '<span class="fshade"></span>' + (l.featured ? '<span class="fbadge">Featured</span>' : '') +
       '<span class="ftext"><span class="fkind">' + esc(headline(l)) + '</span><span class="fsize">' + esc(shortName(l)) + '</span><span class="fprice">' + esc(compactPrice(l)) + '</span>' +
       '<span class="fmeta"><span>' + PLACE_ICO + esc(placeName(l) === 'Other' ? (l.district || '') : placeName(l)) + '</span>' + (km ? '<span>' + PLACE_ICO + km + ' away</span>' : '') + '</span></span></button>' + heartBtn(l) + '</div>';
@@ -682,7 +702,7 @@ function renderHome() {
   $('#nrow').innerHTML = near.map(l => {
     const c = catOf(l.type), ph = l.photos[0], km = kmShort(l);
     return '<div class="ncard" data-id="' + esc(l.id) + '"><button class="nmain" type="button" data-open>' +
-      '<span class="nimg" style="--c:' + cvar(c) + '">' + (ph ? imgTag(ph, c) : catIcon(c)) + '</span>' +
+      '<span class="nimg" style="--c:' + cvar(c) + '">' + (ph ? imgTag(ph, c, '', posOf(l, ph)) : catIcon(c)) + '</span>' +
       '<span class="ntext"><b>' + esc(shortName(l)) + '</b><span class="nprice">' + esc(compactPrice(l)) + '</span><span class="nplace">' + esc(placeName(l) === 'Other' ? (l.district || '') : placeName(l)) + '</span>' +
       (km ? '<span class="nkm">' + PLACE_ICO + km + '</span>' : '') + '</span></button>' + heartBtn(l) + '</div>';
   }).join('');
@@ -776,7 +796,7 @@ function renderList() {
       const facts = cardFacts(l).concat(kmText(kmFrom(l)) || []);
       return '<li class="card' + (l.id === selectedId ? ' sel' : '') + '" data-id="' + esc(l.id) + '">' +
         '<button class="card-main" type="button" data-open>' +
-        '<span class="thumb" style="--c:' + cvar(c) + '">' + (ph ? imgTag(ph, c) : catIcon(c)) +
+        '<span class="thumb" style="--c:' + cvar(c) + '">' + (ph ? imgTag(ph, c, '', posOf(l, ph)) : catIcon(c)) +
         (l.photos.length > 1 ? '<span class="pcount">' + l.photos.length + ' photos</span>' : '') + '</span>' +
         '<span class="card-body"><span class="card-top">' + badges(l) + '</span>' +
         '<span class="card-title">' + esc(l.title) + '</span>' +
@@ -1070,7 +1090,7 @@ function openDetail(id) {
     '<button class="x" type="button" data-close aria-label="Close">&times;</button></div>';
   h += '<div class="gal"><div class="gal-main' + (photos.length ? '' : ' empty') + '" style="--c:' + cvar(cat) + '" id="galMain">' + (photos.length ? imgTag(photos[0], cat, 'Photo 1 of ' + l.title) : catIcon(cat)) + '</div>';
   h += heartBtn(l);
-  if (photos.length > 1) h += '<div class="gal-thumbs">' + photos.map((p, i) => '<button type="button" data-ph="' + i + '" aria-pressed="' + (i === 0) + '" aria-label="Photo ' + (i + 1) + '"><img src="' + esc(p) + '" alt="" loading="lazy"></button>').join('') + '</div>';
+  if (photos.length > 1) h += '<div class="gal-thumbs">' + photos.map((p, i) => '<button type="button" data-ph="' + i + '" aria-pressed="' + (i === 0) + '" aria-label="Photo ' + (i + 1) + '"><img src="' + esc(p) + '" alt="" loading="lazy"' + (posOf(l, p) ? ' style="object-position:' + posOf(l, p) + '"' : '') + '></button>').join('') + '</div>';
   h += '</div>';
   if (l.social) h += '<a class="btn postbtn" href="' + esc(l.social) + '" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>View video / post' + (postSite(l.social) ? ' on ' + postSite(l.social) : '') + '</a>';
   h += '<div><div class="price-big">' + esc(priceText(l)) + '</div>' + (sub ? '<p class="hint mono">' + esc(sub) + '</p>' : '') +
@@ -1083,7 +1103,9 @@ function openDetail(id) {
   if (feats.length) h += '<div class="feats"><span class="feats-h">It has</span><span class="cfacts">' + feats.map(f => '<span>' + esc(f) + '</span>').join('') + '</span></div>';
   if (l.desc) h += '<p class="desc">' + esc(l.desc) + '</p>';
   h += '<div class="field"><span>Where it is</span><div id="detailMap" class="mapbox dmap"></div></div>' +
-    '<div class="row"><button class="btn small" type="button" data-showmap>Show on the big map</button></div>';
+    '<div class="row"><button class="btn small" type="button" data-showmap>Show on the big map</button>' +
+    (CFG.MAPTILER_KEY ? '<button class="btn small" type="button" data-sat aria-pressed="false">Satellite view</button>' : '') + '</div>' +
+    (l.boundary && l.boundary.length >= 3 ? '<p class="hint bndnote"><b>Plot outline:</b> <span>' + esc(boundaryText(l.boundary)) + '</span>. <span>The outline is drawn by the owner and is only a guide. Confirm the exact boundary with the owner and the land papers.</span></p>' : '');
   if (owner) h += '<div class="row owner-row"><button class="btn small" type="button" data-edit>Edit</button>' +
     '<label class="inline"><span class="sr">Status</span><select data-status>' + statusOptions(l) + '</select></label>' +
     '<button class="btn small danger" type="button" data-del>Delete</button></div>' +
@@ -1099,8 +1121,12 @@ function openDetail(id) {
   try {
     detailMap = L.map('detailMap', { zoomControl: true, scrollWheelZoom: false, dragging: !L.Browser.mobile, minZoom: 11, maxBounds: L.latLngBounds(AREA).pad(0.12) });
     detailMap.attributionControl.setPrefix(false);
-    baseLayer().addTo(detailMap);
+    detailMap._base = baseLayer().addTo(detailMap);
     detailMap.setView([l.lat, l.lng], 16);
+    if (l.boundary && l.boundary.length >= 3) {
+      const poly = L.polygon(l.boundary, BND_STYLE).addTo(detailMap);
+      detailMap.fitBounds(poly.getBounds(), { padding: [34, 34], maxZoom: 19 });
+    }
     L.marker([l.lat, l.lng], { icon: pinIcon(l, 'sel'), interactive: false, keyboard: false }).addTo(detailMap);
     const dm = detailMap;
     setTimeout(() => { if (detailMap === dm) dm.invalidateSize(); }, 80);
@@ -1130,6 +1156,7 @@ $('#detailBody').addEventListener('click', e => {
   if (t.closest('[data-talk]')) openContact(id);
   else if (t.closest('[data-share]')) shareLink(l, t.closest('[data-share]'));
   else if (t.closest('[data-interest]')) openInterest(id);
+  else if (t.closest('[data-sat]')) { const b = t.closest('[data-sat]'); if (detailMap) setSat(detailMap, !detailMap._satOn, b); }
   else if (t.closest('[data-showmap]')) { dlgDetail.close(); if (dlgManage.open) dlgManage.close(); showOnMap(id); }
   else if (t.closest('[data-edit]')) { dlgDetail.close(); openEdit(id); }
   else if (t.closest('[data-del]')) askDelete(id);
@@ -1592,7 +1619,7 @@ function quickAnswer(q, lg) {
   const s = q.trim().toLowerCase().replace(/[०-९]/g, d => D2A.indexOf(d)), ne = lg === 'ne';
   if (GREET.test(s)) return { text: Q(lg, 'Namaste. Tell me what you are looking for: the kind of property, the place and your budget.', 'नमस्ते! तपाईं के खोज्दै हुनुहुन्छ भन्नुहोस्: सम्पत्तिको प्रकार, ठाउँ र बजेट।'), ids: [] };
   if (THANKS.test(s)) return { text: Q(lg, 'You are welcome. Ask me anything else about the properties, or press Contact to reach the owner.', 'स्वागत छ! सम्पत्तिबारे अरू केही सोध्नुहोस्, वा मालिकसँग कुरा गर्न “सम्पर्क” थिच्नुहोस्।'), ids: [] };
-  const nm = /^(?:i am|i'm|im|my name is|this is|mero naam|mero nam)\s+([a-zऀ-ॿ]{2,20})[\s!.]*$/.exec(s) || /^(?:म|मेरो नाम)\s+([ऀ-ॿ]{2,20})(?:\s+(?:हुँ|हो))?[\s!।.]*$/.exec(s);
+  const nm = /^(?:(?:hi+|hello+|hey+|namaste)[\s,!.]+)?(?:i am|i'm|im|my name is|this is|mero naam|mero nam)\s+([a-zऀ-ॿ]{2,20})[\s!.]*$/.exec(s) || /^(?:म|मेरो नाम)\s+([ऀ-ॿ]{2,20})(?:\s+(?:हुँ|हो))?[\s!।.]*$/.exec(s);
   if (nm) { const nn = nm[1].charAt(0).toUpperCase() + nm[1].slice(1); return { text: ne ? 'नमस्ते ' + nn + '! तपाईं जग्गा, घर, फ्ल्याट, कोठा वा पसल के खोज्दै हुनुहुन्छ? ठाउँ र बजेट पनि भन्नुहोस्।' : 'Nice to meet you, ' + nn + '. What are you looking for: land, a house, a flat, a room or a shop? Tell me the place and your budget too.', ids: [] }; }
   const asksCount = (/\b(how many|kati (?:wota|ota|vota)|total|count|what (?:do|properties|all)|everything|all properties|show all|list all)\b|कति|जम्मा/.test(s) && /\b(propert|listing|land|house|flat|room|shutter|shop|ghar|jagga|have|got|do you|all)|सम्पत्ति|जग्गा|घर|कोठा|फ्ल्याट|सटर|पसल|छन्|छ\b/.test(s) && !/\b(under|below|upto|within)\b|सम्म|भित्र/.test(s));
   if (asksCount) {
@@ -1656,6 +1683,7 @@ async function ask(q) {
       const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ site: state.site.name || DEF_SITE.name, lang: lg, messages: chat.msgs.slice(-8).map(m => ({ role: m.role, text: m.text })), listings: rows }) });
       const j = await r.json().catch(() => null);
+      if (!r.ok) console.warn('AI chat failed', r.status, j && (j.status || ''), j && (j.detail || j.error || ''));
       if (r.ok && j && j.text) {
         const low = j.text.toLowerCase();
         let ids = shown().filter(l => l.title.length > 5 && low.indexOf(l.title.toLowerCase()) >= 0).slice(0, 5).map(l => l.id);
@@ -1737,7 +1765,7 @@ function renderManage() {
   $('#mList').innerHTML = arr.length ? arr.map(l => {
     const ph = (l.photos || []).find(okUrl), c = catOf(l.type);
     return '<li class="mrow" data-id="' + esc(l.id) + '">' +
-      '<span class="thumb" style="--c:' + cvar(c) + '">' + (ph ? imgTag(ph, c) : catIcon(c)) + '</span>' +
+      '<span class="thumb" style="--c:' + cvar(c) + '">' + (ph ? imgTag(ph, c, '', posOf(l, ph)) : catIcon(c)) + '</span>' +
       '<div class="mbody"><span class="card-top">' + badges(l) + '</span><strong>' + esc(l.title) + '</strong>' +
       '<span class="mprice">' + esc(priceText(l)) + '</span>' + (placeLine(l) ? '<span class="hint">' + esc(placeLine(l)) + '</span>' : '') + '</div>' +
       '<div class="mact"><button class="btn small" type="button" data-view>View</button><button class="btn small" type="button" data-edit>Edit</button>' +
@@ -1780,8 +1808,8 @@ function ensureMini() {
   if (mini) return;
   mini = L.map('miniMap', { minZoom: 9, maxBounds: L.latLngBounds(AREA).pad(0.12), maxBoundsViscosity: 1 });
   mini.attributionControl.setPrefix(false);
-  baseLayer('streets-v2').addTo(mini);
-  mini.on('click', e => setDraftSpot(e.latlng.lat, e.latlng.lng, false, false));
+  mini._base = baseLayer('streets-v2').addTo(mini);
+  mini.on('click', e => { if (bnd.on) bndAdd(e.latlng); else setDraftSpot(e.latlng.lat, e.latlng.lng, false, false); });
 }
 function setMiniMark(lat, lng) {
   if (lat == null) { if (miniMark) { mini.removeLayer(miniMark); miniMark = null; } return; }
@@ -1814,11 +1842,13 @@ function parseCoords(str) {
 // Photo tiles: move earlier, move later, remove. Photos already saved stay exactly as they are until Save is pressed.
 function renderDraftPhotos() {
   const n = draft.photos.length;
-  $('#f_photoList').innerHTML = draft.photos.map((p, i) => '<div class="ph"><img src="' + esc(p.url || p.preview) + '" alt="Photo ' + (i + 1) + '">' + (i === 0 ? '<span class="cover">Cover</span>' : '') +
+  if (!n) draft.sel = null; else if (draft.sel == null || draft.sel >= n || draft.sel < 0) draft.sel = 0;
+  $('#f_photoList').innerHTML = draft.photos.map((p, i) => '<div class="ph' + (i === draft.sel ? ' sel' : '') + '"><button type="button" class="phpick" data-sel="' + i + '" aria-label="Adjust photo ' + (i + 1) + '"><img src="' + esc(photoSrc(p)) + '" alt="Photo ' + (i + 1) + '" style="object-position:' + posText(p) + '"></button>' + (i === 0 ? '<span class="cover">Cover</span>' : '') +
     '<div class="ph-bar"><button type="button" data-mv="-1" data-i="' + i + '" aria-label="Move photo ' + (i + 1) + ' earlier"' + (i === 0 ? ' disabled' : '') + '>&larr;</button>' +
     '<button type="button" data-mv="1" data-i="' + i + '" aria-label="Move photo ' + (i + 1) + ' later"' + (i === n - 1 ? ' disabled' : '') + '>&rarr;</button>' +
     '<button type="button" data-rm="' + i + '" aria-label="Remove photo ' + (i + 1) + '">&times;</button></div></div>').join('');
-  $('#f_photoNote').textContent = n ? n + ' of 10 photos. ' + (n > 1 ? 'Use the arrows to change the order. ' : '') + 'The first photo is the cover.' : PHOTO_NOTE;
+  $('#f_photoNote').textContent = n ? n + ' of 10 photos. Tap a photo to adjust it. ' + (n > 1 ? 'Use the arrows to change the order. ' : '') + 'The first photo is the cover.' : PHOTO_NOTE;
+  renderAdjust();
 }
 function fileToBlob(file) {
   return new Promise((res, rej) => {
@@ -1872,6 +1902,8 @@ function placeMini() {
   draft._placed = true;
   if (draft.lat != null && draft.lng != null) { mini.setView([draft.lat, draft.lng], 17); setMiniMark(draft.lat, draft.lng); }
   else { const c = map.getCenter(); if (map.getZoom() >= 13) mini.setView(c, map.getZoom()); else mini.fitBounds(AREA); }
+  bndDraw();
+  if (draft.boundary && draft.boundary.length >= 3) { try { mini.fitBounds(L.polygon(draft.boundary).getBounds(), { padding: [24, 24], maxZoom: 19 }); } catch (e) {} }
 }
 // Shows the right questions for the chosen category and deal, and hides everything else.
 function applyKind() {
@@ -1920,7 +1952,12 @@ function applyKind() {
 function openEdit(id) {
   const l = id ? byId(id) : null;
   draft = l ? JSON.parse(JSON.stringify(l)) : { id: null, type: null, deal: null, sub: '', title: '', price: 0, rateMode: false, area: { v: 0, u: 'aana' }, built: { v: 0, u: 'sqft' }, deposit: 0, social: '', d: {}, place: '', district: DISTRICT, lat: null, lng: null, desc: '', photos: [], status: 'available' };
-  draft.photos = (draft.photos || []).filter(okUrl).map(u => ({ url: u }));
+  const pf0 = draft.pf || [];
+  draft.photos = (draft.photos || []).filter(okUrl).map((u, i) => ({ url: u, fx: pf0[i] ? pf0[i][0] : null, fy: pf0[i] ? pf0[i][1] : null }));
+  draft.sel = draft.photos.length ? 0 : null;
+  draft.boundary = (draft.boundary || []).map(q => [q[0], q[1]]);
+  $('#adjMsg').textContent = '';
+  if (mini) { bndClear(); setSat(mini, false, $('#b_sat')); }
   draft.keepType = draft.type; draft.keepUnit = l && l.area.v > 0 && UNITS[l.area.u] ? l.area.u : '';
   $('#editH').textContent = l ? 'Edit property' : 'Add property';
   $('#f_save').dataset.label = l ? 'Update property' : 'Save property';
@@ -1994,15 +2031,18 @@ $('#f_here').addEventListener('click', () => {
     { enableHighAccuracy: true, timeout: 15000 });
 });
 $('#f_photoList').addEventListener('click', e => {
-  const rm = e.target.closest('[data-rm]'), mv = e.target.closest('[data-mv]');
-  if (rm) {
+  const rm = e.target.closest('[data-rm]'), mv = e.target.closest('[data-mv]'), pick = e.target.closest('[data-sel]');
+  if (pick) { draft.sel = +pick.dataset.sel; $('#adjMsg').textContent = ''; }
+  else if (rm) {
     const gone = draft.photos.splice(+rm.dataset.rm, 1)[0];
+    if (draft.sel != null && +rm.dataset.rm <= draft.sel && draft.sel > 0) draft.sel--;
     // A photo uploaded during this edit but never saved is removed from storage. Saved photos are only removed after Save.
     if (gone && gone.fresh) removePhotos([gone.url]);
   } else if (mv) {
     const i = +mv.dataset.i, j = i + (+mv.dataset.mv);
     if (j < 0 || j >= draft.photos.length) return;
     const t = draft.photos[i]; draft.photos[i] = draft.photos[j]; draft.photos[j] = t;
+    if (draft.sel === i) draft.sel = j; else if (draft.sel === j) draft.sel = i;
   } else return;
   renderDraftPhotos();
 });
@@ -2019,6 +2059,156 @@ $('#f_photos').addEventListener('change', async e => {
   renderDraftPhotos();
   if (bad) note.textContent = bad + (bad === 1 ? ' photo' : ' photos') + ' could not be read. Use JPG or PNG photos.';
   else if (skipped) note.textContent = 'Only 10 photos fit on one listing. The rest were left out.';
+});
+/* ---------- update 10: adjust photos, satellite view, property boundary ---------- */
+// Satellite pictures help to see a plot. They come from MapTiler, so they need the MapTiler key in js/config.js.
+function satLayer() {
+  return L.tileLayer('https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=' + encodeURIComponent(CFG.MAPTILER_KEY), {
+    maxZoom: 20, maxNativeZoom: 19, attribution: '&copy; <a href="https://www.maptiler.com/copyright/" target="_blank" rel="noopener">MapTiler</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>'
+  });
+}
+function setSat(m, on, btn) {
+  if (!CFG.MAPTILER_KEY || !m || !m._base) return;
+  if (on) {
+    if (!m._sat) {
+      m._sat = satLayer();
+      let good = 0, bad = 0;
+      m._sat.on('tileload', () => { good++; });
+      m._sat.on('tileerror', () => { if (!good && ++bad >= 4 && m._satOn) { setSat(m, false, btn); toast('Satellite view is not available right now.'); } });
+    }
+    if (m.hasLayer(m._base)) m.removeLayer(m._base);
+    m._sat.addTo(m); m._satOn = true;
+  } else {
+    if (m._sat && m.hasLayer(m._sat)) m.removeLayer(m._sat);
+    if (!m.hasLayer(m._base)) m._base.addTo(m);
+    m._satOn = false;
+  }
+  if (btn) { btn.setAttribute('aria-pressed', String(!!m._satOn)); btn.textContent = m._satOn ? 'Map view' : 'Satellite view'; }
+}
+const BND_STYLE = { color: '#F2566E', weight: 3, fillColor: '#F2566E', fillOpacity: 0.16, interactive: false };
+// Area of a drawn outline, in square metres (flat-earth maths is exact enough for one plot).
+function boundaryM2(pts) {
+  if (!pts || pts.length < 3) return 0;
+  const lat0 = pts[0][0], lng0 = pts[0][1], kx = 111320 * Math.cos(lat0 * Math.PI / 180), ky = 110574;
+  const xy = pts.map(p => [(p[1] - lng0) * kx, (p[0] - lat0) * ky]);
+  let s = 0;
+  for (let i = 0; i < xy.length; i++) { const a = xy[i], b = xy[(i + 1) % xy.length]; s += a[0] * b[1] - b[0] * a[1]; }
+  return Math.abs(s) / 2;
+}
+function boundaryText(pts) {
+  const m2 = boundaryM2(pts); if (!(m2 > 0)) return '';
+  const sqft = m2 / 0.09290304, anna = sqft / 342.25;
+  const a = anna >= 10 ? Math.round(anna * 10) / 10 : Math.round(anna * 100) / 100;
+  const ropani = anna >= 16 ? ' = ' + trimNum(Math.round(anna / 16 * 100) / 100) + ' Ropani' : '';
+  return 'about ' + trimNum(a) + ' Anna' + ropani + ' (' + groupIN(sqft) + ' sq ft)';
+}
+
+// ----- drawing the outline on the owner's map -----
+const bnd = { on: false, shape: null, marks: [] };
+const CORNER = L.divIcon({ className: 'corner-wrap', html: '<span class="corner"></span>', iconSize: [26, 26], iconAnchor: [13, 13] });
+function bndClear() {
+  if (mini) { if (bnd.shape) mini.removeLayer(bnd.shape); bnd.marks.forEach(m => mini.removeLayer(m)); mini.getContainer().classList.remove('drawing'); }
+  bnd.shape = null; bnd.marks = []; bnd.on = false;
+}
+function bndRead() {
+  const pts = draft.boundary || [], out = $('#b_read');
+  if (bnd.on) out.textContent = pts.length < 3 ? 'Tap each corner of the plot, going around it. ' + pts.length + (pts.length === 1 ? ' corner' : ' corners') + ' so far. Drag a corner to fix it.' : 'The outline is ' + boundaryText(pts) + '. Keep tapping to add corners, or press Finish.';
+  else out.textContent = pts.length >= 3 ? 'Outline drawn: ' + boundaryText(pts) + '. Visitors will see it on the map.' : (pts.length ? 'Add at least 3 corners to make an outline.' : '');
+  $('#b_start').textContent = bnd.on ? 'Finish drawing' : (pts.length ? 'Edit outline' : 'Draw outline');
+  $('#b_undo').disabled = !pts.length; $('#b_clear').disabled = !pts.length;
+}
+function bndShape() {
+  const pts = draft.boundary || [];
+  if (bnd.shape) { mini.removeLayer(bnd.shape); bnd.shape = null; }
+  if (pts.length >= 3) bnd.shape = L.polygon(pts, BND_STYLE).addTo(mini);
+  else if (pts.length === 2) bnd.shape = L.polyline(pts, { color: BND_STYLE.color, weight: 3, dashArray: '6 6', interactive: false }).addTo(mini);
+}
+function bndDraw() {
+  if (!mini) return;
+  bndClear(); // also leaves drawing mode
+  const pts = draft.boundary || [];
+  bndShape();
+  pts.forEach((p, i) => {
+    const m = L.marker(p, { draggable: true, icon: CORNER, zIndexOffset: 600, keyboard: false }).addTo(mini);
+    m.on('drag', () => { const q = m.getLatLng(); pts[i] = [+q.lat.toFixed(6), +q.lng.toFixed(6)]; bndShape(); });
+    m.on('dragend', () => bndRead());
+    bnd.marks.push(m);
+  });
+  bndRead();
+}
+function bndAdd(ll) {
+  const pts = draft.boundary || (draft.boundary = []);
+  if (pts.length >= 40) { toast('An outline can have up to 40 corners.'); return; }
+  pts.push([+ll.lat.toFixed(6), +ll.lng.toFixed(6)]);
+  const on = bnd.on; bndDraw(); if (on) { bnd.on = true; mini.getContainer().classList.add('drawing'); bndRead(); }
+}
+$('#b_start').addEventListener('click', () => {
+  if (!mini) return;
+  if (bnd.on) { bnd.on = false; mini.getContainer().classList.remove('drawing'); bndRead(); return; }
+  bnd.on = true; mini.getContainer().classList.add('drawing'); bndRead();
+  const c = $('#miniMap'); if (c.scrollIntoView) c.scrollIntoView({ block: 'center', behavior: 'smooth' });
+});
+$('#b_undo').addEventListener('click', () => {
+  if (!draft.boundary || !draft.boundary.length) return;
+  draft.boundary.pop(); const on = bnd.on; bndDraw(); if (on) { bnd.on = true; mini.getContainer().classList.add('drawing'); bndRead(); }
+});
+$('#b_clear').addEventListener('click', () => { draft.boundary = []; bndDraw(); });
+$('#b_sat').addEventListener('click', e => setSat(mini, !mini._satOn, e.currentTarget));
+
+// ----- adjusting a photo: the part that shows on the cards, turning it, making it the cover -----
+const photoSrc = p => p.url || p.preview;
+const posText = p => (p.fx == null ? 50 : p.fx) + '% ' + (p.fy == null ? 50 : p.fy) + '%';
+function renderAdjust() {
+  const box = $('#f_adjust'), p = draft.photos[draft.sel];
+  box.hidden = !p;
+  if (!p) return;
+  $('#adjNo').textContent = (draft.sel + 1) + ' of ' + draft.photos.length;
+  const img = $('#adjImg'); if (img.getAttribute('src') !== photoSrc(p)) img.src = photoSrc(p);
+  $('#adjDot').style.left = (p.fx == null ? 50 : p.fx) + '%'; $('#adjDot').style.top = (p.fy == null ? 50 : p.fy) + '%';
+  const pv = $('#adjPrev'); if (pv.getAttribute('src') !== photoSrc(p)) pv.src = photoSrc(p);
+  pv.style.objectPosition = posText(p);
+  $('#adjCover').disabled = draft.sel === 0;
+  const tile = $('#f_photoList').querySelectorAll('.ph img')[draft.sel]; if (tile) tile.style.objectPosition = posText(p);
+}
+(function () {
+  const stage = $('#adjStage'); let drag = false;
+  const aim = e => {
+    const p = draft && draft.photos[draft.sel]; if (!p) return;
+    const r = $('#adjImg').getBoundingClientRect(); if (!r.width || !r.height) return;
+    p.fx = Math.max(0, Math.min(100, Math.round((e.clientX - r.left) / r.width * 100)));
+    p.fy = Math.max(0, Math.min(100, Math.round((e.clientY - r.top) / r.height * 100)));
+    renderAdjust();
+  };
+  stage.addEventListener('pointerdown', e => { drag = true; try { stage.setPointerCapture(e.pointerId); } catch (x) {} aim(e); e.preventDefault(); });
+  stage.addEventListener('pointermove', e => { if (drag) aim(e); });
+  ['pointerup', 'pointercancel'].forEach(t => stage.addEventListener(t, () => { drag = false; }));
+})();
+$('#adjCentre').addEventListener('click', () => { const p = draft.photos[draft.sel]; if (p) { p.fx = p.fy = 50; renderAdjust(); } });
+$('#adjCover').addEventListener('click', () => {
+  if (draft.sel > 0) { const p = draft.photos.splice(draft.sel, 1)[0]; draft.photos.unshift(p); draft.sel = 0; renderDraftPhotos(); }
+});
+$('#adjRot').addEventListener('click', async () => {
+  const p = draft.photos[draft.sel], msg = $('#adjMsg'), btn = $('#adjRot'); if (!p) return;
+  btn.disabled = true; msg.textContent = 'Turning the photo…';
+  try {
+    let blob = p.blob;
+    if (!blob) { const r = await fetch(p.url, { cache: 'no-store' }); if (!r.ok) throw new Error('fetch'); blob = await r.blob(); }
+    const url = URL.createObjectURL(blob);
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const c = document.createElement('canvas'); c.width = img.naturalHeight; c.height = img.naturalWidth;
+    const g = c.getContext('2d'); g.translate(c.width, 0); g.rotate(Math.PI / 2); g.drawImage(img, 0, 0);
+    URL.revokeObjectURL(url);
+    const nb = await new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('blob')), 'image/jpeg', 0.85));
+    // A photo uploaded earlier in this same edit is replaced, so it does not stay behind in storage.
+    if (p.fresh && p.url) removePhotos([p.url]);
+    if (p.preview && p.blob) URL.revokeObjectURL(p.preview);
+    const ox = p.fx == null ? 50 : p.fx, oy = p.fy == null ? 50 : p.fy;
+    delete p.url; p.fresh = false; p.blob = nb; p.preview = URL.createObjectURL(nb);
+    p.fx = 100 - oy; p.fy = ox;
+    msg.textContent = '';
+    renderDraftPhotos();
+  } catch (e) { msg.textContent = 'This photo could not be turned here. Remove it and add it again from your phone.'; }
+  finally { btn.disabled = false; }
 });
 function autoTitle(kind, sub, d, areaTxt, place) {
   let t;
@@ -2088,6 +2278,8 @@ $('#editForm').addEventListener('submit', async e => {
       id: id, type: cat.id, deal: draft.deal, sub: sub, title: title, price: total, rateMode: perMode, area: area,
       built: { v: K.built && bv > 0 ? bv : 0, u: $('#f_builtUnit').value === 'sqm' ? 'sqm' : 'sqft' }, deposit: dep.value, social: social, d: d,
       place: place, district: DISTRICT, lat: draft.lat, lng: draft.lng, desc: $('#f_desc').value.trim(), photos: urls,
+      pf: draft.photos.slice(0, urls.length).map(ph => ph.fx == null || (ph.fx === 50 && ph.fy === 50) ? null : [ph.fx, ph.fy]),
+      boundary: (draft.boundary || []).length >= 3 ? draft.boundary : [],
       status: STATUSES.indexOf($('#f_status').value) >= 0 ? $('#f_status').value : 'available'
     };
     const row = toRow(item);

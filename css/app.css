@@ -835,3 +835,20 @@ body.has-owner .page{padding-bottom:120px}
 .is-ne body{line-height:1.6}
 .is-ne .chip,.is-ne .btn{line-height:1.3}
 .chatlang{margin:8px 0 0;padding-bottom:6px;border-bottom:1px solid var(--line)}
+
+/* Update 10: adjust photos, plot outline */
+.ph.sel{outline:2px solid var(--accent);outline-offset:1px}
+.ph .phpick{position:static;width:100%;height:auto;padding:0;border-radius:0;background:none;display:block;cursor:pointer}
+.adj{display:grid;gap:10px;margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.adj-wrap{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.adj-stage{position:relative;display:inline-block;max-width:100%;touch-action:none;cursor:crosshair;line-height:0;border-radius:6px;overflow:hidden;background:var(--surface-2);user-select:none;-webkit-user-select:none}
+.adj-stage img{display:block;max-width:100%;max-height:260px;width:auto;height:auto;-webkit-user-drag:none;pointer-events:none}
+.adj-dot{position:absolute;width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;border:3px solid var(--accent);background:rgba(0,0,0,.25);box-shadow:0 0 0 2px #000;pointer-events:none}
+.adj-dot::after{content:"";position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:var(--accent)}
+.adj-side{display:grid;gap:6px}
+.adj-card{width:140px;aspect-ratio:4/3;border-radius:6px;overflow:hidden;background:var(--surface-2);border:1px solid var(--line)}
+.adj-card img{width:100%;height:100%;object-fit:cover;display:block}
+.minimap.drawing{cursor:crosshair;outline:2px solid var(--pin)}
+.corner-wrap{background:none;border:0}
+.corner{display:block;width:22px;height:22px;margin:2px;border-radius:50%;background:#fff;border:4px solid var(--pin);box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.bndnote{margin:8px 0 0}

@@ -241,7 +241,7 @@
       <button class="btn" id="signOutBtn" type="button" hidden>Sign out</button>
       <button class="btn" id="loginBtn" type="button">Owner sign in</button>
     </div>
-    <p class="hint ver" data-nt>Version 8</p>
+    <p class="hint ver" data-nt>Version 10</p>
   </div>
 </dialog>
 
@@ -430,6 +430,16 @@
         <p class="hint">Tap the map to drop the pin, then drag it to the exact spot.</p>
         <div id="miniMap" class="mapbox minimap"></div>
       </div>
+      <div class="field" id="f_bndBox"><span>Plot outline (optional)</span>
+        <p class="hint">Show visitors exactly where the plot is. Press “Draw outline”, then tap each corner of the plot on the map, going around it. Drag a corner to fix it. Use Satellite view to see the plot from above.</p>
+        <div class="row">
+          <button class="btn small" type="button" id="b_start">Draw outline</button>
+          <button class="btn small" type="button" id="b_undo" disabled>Undo last corner</button>
+          <button class="btn small" type="button" id="b_clear" disabled>Clear</button>
+          <button class="btn small" type="button" id="b_sat" aria-pressed="false">Satellite view</button>
+        </div>
+        <p class="hint" id="b_read" role="status"></p>
+      </div>
       <label class="field" for="f_coords"><span>Coordinates</span>
         <input id="f_coords" type="text" placeholder="27.71720, 85.32400" autocomplete="off">
       </label>
@@ -445,6 +455,19 @@
 
       <div class="field"><span>Photos (up to 10)</span>
         <div class="photos" id="f_photoList"></div>
+        <div class="adj" id="f_adjust" hidden>
+          <p class="hint">Photo <b id="adjNo"></b>. Drag on the photo to choose the part that shows on the property cards.</p>
+          <div class="adj-wrap">
+            <div class="adj-stage" id="adjStage"><img id="adjImg" alt="Selected photo"><i class="adj-dot" id="adjDot"></i></div>
+            <div class="adj-side"><span class="hint">On the cards</span><div class="adj-card"><img id="adjPrev" alt=""></div></div>
+          </div>
+          <div class="row">
+            <button class="btn small" type="button" id="adjRot">Turn photo</button>
+            <button class="btn small" type="button" id="adjCover">Make this the cover</button>
+            <button class="btn small" type="button" id="adjCentre">Centre</button>
+          </div>
+          <p class="hint" id="adjMsg" role="status"></p>
+        </div>
         <div class="row">
           <label class="btn small filebtn" for="f_photos">Choose photos
             <input id="f_photos" type="file" accept="image/*" multiple>
